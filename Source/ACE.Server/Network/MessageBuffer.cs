@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace ACE.Server.Network
 {
-    internal class MessageBuffer
+    public class MessageBuffer
     {
         private List<ClientPacketFragment> fragments = new List<ClientPacketFragment>();
 

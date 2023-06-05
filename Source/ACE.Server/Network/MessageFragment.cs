@@ -7,7 +7,7 @@ using log4net;
 
 namespace ACE.Server.Network
 {
-    internal class MessageFragment
+    public class MessageFragment
     {
         private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
         private static readonly ILog packetLog = LogManager.GetLogger(System.Reflection.Assembly.GetEntryAssembly(), "Packets");
