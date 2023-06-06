@@ -21,6 +21,7 @@ using OutboundPacket = ACE.Server.Network.ServerPacket;
 using OutboundPacketFragment = ACE.Server.Network.ServerPacketFragment;
 
 using log4net;
+using System.Net;
 
 namespace ARC.Client.Network;
 
@@ -33,7 +34,7 @@ public class NetworkSession
     private const int timeBetweenTimeSync = 20000; // 20s
     private const int timeBetweenAck = 2000; // 2s
 
-    private readonly Session session;
+    private readonly EndPoint endpoint;
     private readonly ConnectionListener connectionListener;
 
     private readonly Object[] currentBundleLocks = new Object[(int)GameMessageGroup.QueueMax];
@@ -91,9 +92,9 @@ public class NetworkSession
     public ushort ClientId { get; }
     public ushort ServerId { get; }
 
-    public NetworkSession(Session session, ConnectionListener connectionListener, ushort clientId, ushort serverId)
+    public NetworkSession(EndPoint endpoint, ConnectionListener connectionListener, ushort clientId, ushort serverId)
     {
-        this.session = session;
+        this.endpoint = endpoint;
         this.connectionListener = connectionListener;
 
         ClientId = clientId;
@@ -127,7 +128,7 @@ public class NetworkSession
             {
                 var currentBundle = currentBundles[(int)grp];
                 currentBundle.EncryptedChecksum = true;
-                packetLog.DebugFormat("[{0}] Enqueuing Message {1}", session.LoggingIdentifier, message.Opcode);
+                packetLog.DebugFormat("Enqueuing Message {0}", message.Opcode);
                 currentBundle.Enqueue(message);
             }
         }
@@ -145,7 +146,7 @@ public class NetworkSession
 
         foreach (var packet in packets)
         {
-            packetLog.DebugFormat("[{0}] Enqueuing Packet {1}", session.LoggingIdentifier, packet.GetHashCode());
+            packetLog.DebugFormat("Enqueuing Packet {0}", packet.GetHashCode());
             packetQueue.Enqueue(packet);
         }
     }
@@ -177,7 +178,7 @@ public class NetworkSession
                 {
                     if (sendResync && !currentBundle.TimeSync && DateTime.UtcNow > nextResync)
                     {
-                        packetLog.DebugFormat("[{0}] Setting to send TimeSync packet", session.LoggingIdentifier);
+                        packetLog.DebugFormat("Setting to send TimeSync packet");
                         currentBundle.TimeSync = true;
                         currentBundle.EncryptedChecksum = true;
                         nextResync = DateTime.UtcNow.AddMilliseconds(timeBetweenTimeSync);
@@ -185,14 +186,14 @@ public class NetworkSession
 
                     if (sendAck && !currentBundle.SendAck && DateTime.UtcNow > nextAck)
                     {
-                        packetLog.DebugFormat("[{0}] Setting to send ACK packet", session.LoggingIdentifier);
+                        packetLog.DebugFormat("Setting to send ACK packet");
                         currentBundle.SendAck = true;
                         nextAck = DateTime.UtcNow.AddMilliseconds(timeBetweenAck);
                     }
 
                     if (currentBundle.NeedsSending && DateTime.UtcNow >= nextSend)
                     {
-                        packetLog.DebugFormat("[{0}] Swapping bundle", session.LoggingIdentifier);
+                        packetLog.DebugFormat("Swapping bundle");
                         // Swap out bundle so we can process it
                         bundleToSend = currentBundle;
                         currentBundles[i] = new NetworkBundle();
@@ -202,7 +203,7 @@ public class NetworkSession
                 {
                     if (currentBundle.NeedsSending && DateTime.UtcNow >= nextSend)
                     {
-                        packetLog.DebugFormat("[{0}] Swapping bundle", session.LoggingIdentifier);
+                        packetLog.DebugFormat("Swapping bundle");
                         // Swap out bundle so we can process it
                         bundleToSend = currentBundle;
                         currentBundles[i] = new NetworkBundle();
@@ -246,7 +247,7 @@ public class NetworkSession
         if (isReleased) // Session has been removed
             return;
 
-        packetLog.DebugFormat("[{0}] Processing packet {1}", session.LoggingIdentifier, packet.Header.Sequence);
+        packetLog.DebugFormat("Processing packet {0}", packet.Header.Sequence);
         NetworkStatistics.C2S_Packets_Aggregate_Increment();
 
         if (!packet.VerifyCRC(ConnectionData.CryptoClient))
@@ -282,31 +283,6 @@ public class NetworkSession
             return; //cleartext crc NAK is never accompanied by additional data needed by the rest of the pipeline
         }
 
-        #region order-insensitive "half-processing"
-
-        if (packet.Header.HasFlag(PacketHeaderFlags.Disconnect))
-        {
-            session.Terminate(SessionTerminationReason.PacketHeaderDisconnect);
-            return;
-        }
-
-        if (packet.Header.HasFlag(PacketHeaderFlags.NetErrorDisconnect))
-        {
-            session.Terminate(SessionTerminationReason.ClientSentNetworkErrorDisconnect);
-            return;
-        }
-
-        // depending on the current session state:
-        // Set the next timeout tick value, to compare against in the WorldManager
-        // Sessions that have gone past the AuthLoginRequest step will stay active for a longer period of time (exposed via configuration) 
-        // Sessions that in the AuthLoginRequest will have a short timeout, as set in the AuthenticationHandler.DefaultAuthTimeout.
-        // Example: Applications that check uptime will stay in the AuthLoginRequest state.
-        session.Network.TimeoutTick = (session.State == SessionState.AuthLoginRequest) ?
-            DateTime.UtcNow.AddSeconds(AuthenticationHandler.DefaultAuthTimeout).Ticks : // Default is 15s
-            DateTime.UtcNow.AddSeconds(NetworkManager.DefaultSessionTimeout).Ticks; // Default is 60s
-
-        #endregion
-
         #region Reordering stage
 
         // Reordering stage
@@ -317,7 +293,7 @@ public class NetworkSession
         if (packet.Header.Sequence <= lastReceivedPacketSequence && packet.Header.Sequence != 0 &&
             !(packet.Header.Flags == PacketHeaderFlags.AckSequence && packet.Header.Sequence == lastReceivedPacketSequence))
         {
-            packetLog.WarnFormat("[{0}] Packet {1} received again", session.LoggingIdentifier, packet.Header.Sequence);
+            packetLog.WarnFormat("Packet {0} received again", packet.Header.Sequence);
             return;
         }
 
@@ -326,7 +302,7 @@ public class NetworkSession
         var desiredSeq = lastReceivedPacketSequence + 1;
         if (packet.Header.Sequence > desiredSeq)
         {
-            packetLog.DebugFormat("[{0}] Packet {1} received out of order", session.LoggingIdentifier, packet.Header.Sequence);
+            packetLog.DebugFormat("Packet {0} received out of order", packet.Header.Sequence);
 
             if (!outOfOrderPackets.ContainsKey(packet.Header.Sequence))
                 outOfOrderPackets.TryAdd(packet.Header.Sequence, packet);
@@ -367,8 +343,7 @@ public class NetworkSession
         uint bottom = desiredSeq + 1;
         if (rcvdSeq < bottom || rcvdSeq - bottom > CryptoSystem.MaximumEffortLevel)
         {
-            session.Terminate(SessionTerminationReason.AbnormalSequenceReceived);
-            return;
+            throw new Exception(SessionTerminationReasonHelper.GetDescription(SessionTerminationReason.AbnormalSequenceReceived));
         }
         uint seqIdCount = 1;
         for (uint a = bottom; a < rcvdSeq; a++)
@@ -395,7 +370,7 @@ public class NetworkSession
         EnqueueSend(reqPacket);
 
         LastRequestForRetransmitTime = DateTime.UtcNow;
-        packetLog.DebugFormat("[{0}] Requested retransmit of {1}", session.LoggingIdentifier, needSeq.Select(k => k.ToString()).Aggregate((a, b) => a + ", " + b));
+        packetLog.DebugFormat("Requested retransmit of {0}", needSeq.Select(k => k.ToString()).Aggregate((a, b) => a + ", " + b));
         NetworkStatistics.S2C_RequestsForRetransmit_Aggregate_Increment();
     }
 
@@ -408,7 +383,7 @@ public class NetworkSession
     /// <param name="packet">InboundPacket to handle</param>
     private void HandleOrderedPacket(InboundPacket packet)
     {
-        packetLog.DebugFormat("[{0}] Handling packet {1}", session.LoggingIdentifier, packet.Header.Sequence);
+        packetLog.DebugFormat("Handling packet {0}", packet.Header.Sequence);
 
         // If we have an EchoRequest flag, we should flag to respond with an echo response on next send.
         if (packet.Header.HasFlag(PacketHeaderFlags.EchoRequest))
@@ -423,7 +398,7 @@ public class NetworkSession
 
         if (packet.Header.HasFlag(PacketHeaderFlags.TimeSync))
         {
-            packetLog.DebugFormat("[{0}] Incoming TimeSync TS: {1}", session.LoggingIdentifier, packet.HeaderOptional.TimeSynch);
+            packetLog.DebugFormat("Incoming TimeSync TS: {0}", packet.HeaderOptional.TimeSynch);
             // Do something with this...
             // Based on network traces these are not 1:1.  Server seems to send them every 20 seconds per port.
             // Client seems to send them alternatingly every 2 or 4 seconds per port.
@@ -436,8 +411,8 @@ public class NetworkSession
         // In our current implimenation we handle all roles in this one server.
         if (packet.Header.HasFlag(PacketHeaderFlags.LoginRequest))
         {
-            packetLog.Debug($"[{session.LoggingIdentifier}] LoginRequest");
-            AuthenticationHandler.HandleLoginRequest(packet, session);
+            packetLog.Debug("LoginRequest");
+            // AuthenticationHandler.HandleLoginRequest(packet, session);
             return;
         }
 
@@ -456,7 +431,7 @@ public class NetworkSession
     /// <param name="fragment">InboundPacketFragment to process</param>
     private void ProcessFragment(InboundPacketFragment fragment)
     {
-        packetLog.DebugFormat("[{0}] Processing fragment {1}", session.LoggingIdentifier, fragment.Header.Sequence);
+        packetLog.DebugFormat("Processing fragment {0}", fragment.Header.Sequence);
 
         ClientMessage message = null;
 
@@ -464,17 +439,17 @@ public class NetworkSession
         if (fragment.Header.Count != 1)
         {
             // Packet is split
-            packetLog.DebugFormat("[{0}] Fragment {1} is split, this index {2} of {3} fragments", session.LoggingIdentifier, fragment.Header.Sequence, fragment.Header.Index, fragment.Header.Count);
+            packetLog.DebugFormat("Fragment {0} is split, this index {1} of {2} fragments", fragment.Header.Sequence, fragment.Header.Index, fragment.Header.Count);
 
             if (partialFragments.TryGetValue(fragment.Header.Sequence, out var buffer))
             {
                 // Existing buffer, add this to it and check if we are finally complete.
                 buffer.AddFragment(fragment);
-                packetLog.DebugFormat("[{0}] Added fragment {1} to existing buffer. Buffer at {2} of {3}", session.LoggingIdentifier, fragment.Header.Sequence, buffer.Count, buffer.TotalFragments);
+                packetLog.DebugFormat("Added fragment {0} to existing buffer. Buffer at {1} of {2}", fragment.Header.Sequence, buffer.Count, buffer.TotalFragments);
                 if (buffer.Complete)
                 {
                     // The buffer is complete, so we can go ahead and handle
-                    packetLog.DebugFormat("[{0}] Buffer {1} is complete", session.LoggingIdentifier, buffer.Sequence);
+                    packetLog.DebugFormat("Buffer {0} is complete", buffer.Sequence);
                     message = buffer.GetMessage();
                     MessageBuffer removed = null;
                     partialFragments.TryRemove(fragment.Header.Sequence, out removed);
@@ -483,18 +458,18 @@ public class NetworkSession
             else
             {
                 // No existing buffer, so add a new one for this fragment sequence.
-                packetLog.DebugFormat("[{0}] Creating new buffer {1} for this split fragment", session.LoggingIdentifier, fragment.Header.Sequence);
+                packetLog.DebugFormat("Creating new buffer {0} for this split fragment", fragment.Header.Sequence);
                 var newBuffer = new MessageBuffer(fragment.Header.Sequence, fragment.Header.Count);
                 newBuffer.AddFragment(fragment);
 
-                packetLog.DebugFormat("[{0}] Added fragment {1} to the new buffer. Buffer at {2} of {3}", session.LoggingIdentifier, fragment.Header.Sequence, newBuffer.Count, newBuffer.TotalFragments);
+                packetLog.DebugFormat("Added fragment {0} to the new buffer. Buffer at {1} of {2}", fragment.Header.Sequence, newBuffer.Count, newBuffer.TotalFragments);
                 partialFragments.TryAdd(fragment.Header.Sequence, newBuffer);
             }
         }
         else
         {
             // Packet is not split, proceed with handling it.
-            packetLog.DebugFormat("[{0}] Fragment {1} is not split", session.LoggingIdentifier, fragment.Header.Sequence);
+            packetLog.DebugFormat("Fragment {0} is not split", fragment.Header.Sequence);
             message = new ClientMessage(fragment.Data);
         }
 
@@ -504,12 +479,12 @@ public class NetworkSession
             // First check if this message is the next sequence, if it is not, add it to our outOfOrderFragments
             if (fragment.Header.Sequence == lastReceivedFragmentSequence + 1)
             {
-                packetLog.DebugFormat("[{0}] Handling fragment {1}", session.LoggingIdentifier, fragment.Header.Sequence);
+                packetLog.DebugFormat("Handling fragment {0}", fragment.Header.Sequence);
                 HandleFragment(message);
             }
             else
             {
-                packetLog.DebugFormat("[{0}] Fragment {1} is early, lastReceivedFragmentSequence = {2}", session.LoggingIdentifier, fragment.Header.Sequence, lastReceivedFragmentSequence);
+                packetLog.DebugFormat("Fragment {0} is early, lastReceivedFragmentSequence = {1}", fragment.Header.Sequence, lastReceivedFragmentSequence);
                 outOfOrderFragments.TryAdd(fragment.Header.Sequence, message);
             }
         }
@@ -521,7 +496,8 @@ public class NetworkSession
     /// <param name="message">ClientMessage to process</param>
     private void HandleFragment(ClientMessage message)
     {
-        InboundMessageManager.HandleClientMessage(message, session);
+        // Todo
+        // InboundMessageManager.HandleClientMessage(message, session);
         lastReceivedFragmentSequence++;
     }
 
@@ -532,7 +508,7 @@ public class NetworkSession
     {
         while (outOfOrderPackets.TryRemove(lastReceivedPacketSequence + 1, out var packet))
         {
-            packetLog.DebugFormat("[{0}] Ready to handle out-of-order packet {1}", session.LoggingIdentifier, packet.Header.Sequence);
+            packetLog.DebugFormat("Ready to handle out-of-order packet {0}", packet.Header.Sequence);
             HandleOrderedPacket(packet);
         }
     }
@@ -544,7 +520,7 @@ public class NetworkSession
     {
         while (outOfOrderFragments.TryRemove(lastReceivedFragmentSequence + 1, out var message))
         {
-            packetLog.DebugFormat("[{0}] Ready to handle out of order fragment {1}", session.LoggingIdentifier, lastReceivedFragmentSequence + 1);
+            packetLog.DebugFormat("Ready to handle out of order fragment {0}", lastReceivedFragmentSequence + 1);
             HandleFragment(message);
         }
     }
@@ -562,76 +538,6 @@ public class NetworkSession
     private double lastDiff;
     private int echoDiff;
 
-    private void VerifyEcho(float clientTime)
-    {
-        if (session.Player == null || session.logOffRequestTime != DateTime.MinValue)
-            return;
-
-        var serverTime = DateTime.UtcNow;
-
-        if (lastClientTime == 0)
-        {
-            lastClientTime = clientTime;
-            lastServerTime = serverTime;
-            return;
-        }
-
-        var serverTimeDiff = serverTime - lastServerTime;
-        var clientTimeDiff = clientTime - lastClientTime;
-
-        var diff = Math.Abs(serverTimeDiff.TotalSeconds - clientTimeDiff);
-
-        if (diff > EchoThreshold && diff - lastDiff > DiffThreshold)
-        {
-            lastDiff = diff;
-            echoDiff++;
-
-            if (echoDiff >= EchoLogInterval)
-                log.Warn($"{session.Player.Name} - TimeSync error: {echoDiff} (diff: {diff})");
-
-            if (echoDiff >= EchoInterval)
-            {
-                log.Error($"{session.Player.Name} - disconnected for speedhacking");
-
-                var actionChain = new ActionChain();
-                actionChain.AddAction(session.Player, () =>
-                {
-                    //session.Network.EnqueueSend(new GameMessageBootAccount(session));
-                    session.Network.EnqueueSend(new GameMessageSystemChat($"TimeSync: client speed error", ChatMessageType.Broadcast));
-                    session.LogOffPlayer();
-
-                    echoDiff = 0;
-                    lastDiff = 0;
-                    lastClientTime = 0;
-
-                });
-                actionChain.EnqueueChain();
-            }
-        }
-        else if (echoDiff > 0)
-        {
-            if (echoDiff > EchoLogInterval)
-                log.Warn($"{session.Player.Name} - Diff: {diff}");
-
-            lastDiff = 0;
-            echoDiff = 0;
-        }
-    }
-
-    //is this special channel
-    private void FlagEcho(float clientTime)
-    {
-        var currentBundleLock = currentBundleLocks[(int)GameMessageGroup.InvalidQueue];
-        lock (currentBundleLock)
-        {
-            var currentBundle = currentBundles[(int)GameMessageGroup.InvalidQueue];
-
-            // Debug.Assert(clientTime == -1f, "Multiple EchoRequests before Flush, potential issue with network logic!");
-            currentBundle.ClientTime = clientTime;
-            currentBundle.EncryptedChecksum = true;
-        }
-    }
-
     private void AcknowledgeSequence(uint sequence)
     {
         // TODO Sending Acks seems to cause some issues.  Needs further research.
@@ -648,7 +554,7 @@ public class NetworkSession
     {
         if (cachedPackets.TryGetValue(sequence, out var cachedPacket))
         {
-            packetLog.DebugFormat("[{0}] Retransmit {1}", session.LoggingIdentifier, sequence);
+            packetLog.DebugFormat("Retransmit {0}", sequence);
 
             if (!cachedPacket.Header.HasFlag(PacketHeaderFlags.Retransmission))
                 cachedPacket.Header.Flags |= PacketHeaderFlags.Retransmission;
@@ -663,15 +569,15 @@ public class NetworkSession
             // This is to catch a race condition between .Count and .Min() and .Max()
             try
             {
-                log.Error($"Session {session.Network?.ClientId}\\{session.EndPoint} ({session.Account}:{session.Player?.Name}) retransmit requested packet {sequence} not in cache. Cache range {cachedPackets.Keys.Min()} - {cachedPackets.Keys.Max()}.");
+                log.Error($"Retransmit requested packet {sequence} not in cache. Cache range {cachedPackets.Keys.Min()} - {cachedPackets.Keys.Max()}.");
             }
             catch
             {
-                log.Error($"Session {session.Network?.ClientId}\\{session.EndPoint} ({session.Account}:{session.Player?.Name}) retransmit requested packet {sequence} not in cache. Cache is empty. Race condition threw exception.");
+                log.Error($"Retransmit requested packet {sequence} not in cache. Cache is empty. Race condition threw exception.");
             }
         }
         else
-            log.Error($"Session {session.Network?.ClientId}\\{session.EndPoint} ({session.Account}:{session.Player?.Name}) retransmit requested packet {sequence} not in cache. Cache is empty.");
+            log.Error($"Retransmit requested packet {sequence} not in cache. Cache is empty.");
 
         return false;
     }
@@ -680,7 +586,7 @@ public class NetworkSession
     {
         while (packetQueue.TryDequeue(out var packet))
         {
-            packetLog.DebugFormat("[{0}] Flushing packets, count {1}", session.LoggingIdentifier, packetQueue.Count);
+            packetLog.DebugFormat("Flushing packets, count {0}", packetQueue.Count);
 
             if (packet.Header.HasFlag(PacketHeaderFlags.EncryptedChecksum) && ConnectionData.PacketSequence.CurrentValue == 0)
                 ConnectionData.PacketSequence = new UIntSequence(1);
@@ -705,13 +611,13 @@ public class NetworkSession
 
     private void SendPacket(OutboundPacket packet)
     {
-        packetLog.DebugFormat("[{0}] Sending packet {1}", session.LoggingIdentifier, packet.GetHashCode());
+        packetLog.DebugFormat("Sending packet {0}", packet.GetHashCode());
         NetworkStatistics.S2C_Packets_Aggregate_Increment();
 
         if (packet.Header.HasFlag(PacketHeaderFlags.EncryptedChecksum))
         {
             uint issacXor = ConnectionData.IssacServer.Next();
-            packetLog.DebugFormat("[{0}] Setting Issac for packet {1} to {2}", session.LoggingIdentifier, packet.GetHashCode(), issacXor);
+            packetLog.DebugFormat("Setting Issac for packet {0} to {1}", packet.GetHashCode(), issacXor);
             packet.IssacXor = issacXor;
         }
 
@@ -734,14 +640,14 @@ public class NetworkSession
             {
                 var listenerEndpoint = (System.Net.IPEndPoint)socket.LocalEndPoint;
                 var sb = new StringBuilder();
-                sb.AppendLine(String.Format("[{5}] Sending Packet (Len: {0}) [{1}:{2}=>{3}:{4}]", size, listenerEndpoint.Address, listenerEndpoint.Port, session.EndPoint.Address, session.EndPoint.Port, session.Network.ClientId));
+                sb.AppendLine(String.Format("Sending Packet (Len: {0}) [{1}:{2}]", size, listenerEndpoint.Address, listenerEndpoint.Port));
                 sb.AppendLine(buffer.BuildPacketString(0, size));
                 packetLog.Debug(sb.ToString());
             }
 
             try
             {
-                socket.SendTo(buffer, size, SocketFlags.None, session.EndPoint);
+                socket.SendTo(buffer, size, SocketFlags.None, endpoint);
             }
             catch (SocketException ex)
             {
@@ -752,10 +658,10 @@ public class NetworkSession
                 var listenerEndpoint = (System.Net.IPEndPoint)socket.LocalEndPoint;
                 var sb = new StringBuilder();
                 sb.AppendLine(ex.ToString());
-                sb.AppendLine(String.Format("[{5}] Sending Packet (Len: {0}) [{1}:{2}=>{3}:{4}]", buffer.Length, listenerEndpoint.Address, listenerEndpoint.Port, session.EndPoint.Address, session.EndPoint.Port, session.Network.ClientId));
+                sb.AppendLine(String.Format("Sending Packet (Len: {0}) [{1}:{2}]", buffer.Length, listenerEndpoint.Address, listenerEndpoint.Port));
                 log.Error(sb.ToString());
 
-                session.Terminate(SessionTerminationReason.SendToSocketException, null, null, ex.Message);
+                throw new Exception(SessionTerminationReasonHelper.GetDescription(SessionTerminationReason.SendToSocketException));
             }
         }
         finally
@@ -772,7 +678,7 @@ public class NetworkSession
     /// <param name="bundle"></param>
     private void SendBundle(NetworkBundle bundle, GameMessageGroup group)
     {
-        packetLog.DebugFormat("[{0}] Sending Bundle", session.LoggingIdentifier);
+        packetLog.DebugFormat("Sending Bundle");
 
         bool writeOptionalHeaders = true;
 
@@ -787,7 +693,7 @@ public class NetworkSession
             fragments.Add(fragment);
         }
 
-        packetLog.DebugFormat("[{0}] Bundle Fragment Count: {1}", session.LoggingIdentifier, fragments.Count);
+        packetLog.DebugFormat("Bundle Fragment Count: {0}", fragments.Count);
 
         // Loop through while we have fragements
         while (fragments.Count > 0 || writeOptionalHeaders)
@@ -810,7 +716,7 @@ public class NetworkSession
                 // If a large message send only this one, filling the whole packet
                 if (firstMessage.DataRemaining >= availableSpace)
                 {
-                    packetLog.DebugFormat("[{0}] Sending large fragment", session.LoggingIdentifier);
+                    packetLog.DebugFormat("Sending large fragment");
                     OutboundPacketFragment spf = firstMessage.GetNextFragment();
                     packet.Fragments.Add(spf);
                     availableSpace -= spf.Length;
@@ -838,7 +744,7 @@ public class NetworkSession
                         // Is this a large fragment and does it have a tail that needs sending?
                         if (!fragment.TailSent && availableSpace >= fragment.TailSize)
                         {
-                            packetLog.DebugFormat("[{0}] Sending tail fragment", session.LoggingIdentifier);
+                            packetLog.DebugFormat("Sending tail fragment");
                             OutboundPacketFragment spf = fragment.GetTailFragment();
                             packet.Fragments.Add(spf);
                             availableSpace -= spf.Length;
@@ -846,7 +752,7 @@ public class NetworkSession
                         // Otherwise will this message fit in the remaining space?
                         else if (availableSpace >= fragment.NextSize)
                         {
-                            packetLog.DebugFormat("[{0}] Sending small message", session.LoggingIdentifier);
+                            packetLog.DebugFormat("Sending small message");
                             OutboundPacketFragment spf = fragment.GetNextFragment();
                             packet.Fragments.Add(spf);
                             availableSpace -= spf.Length;
@@ -870,7 +776,7 @@ public class NetworkSession
             // If no messages, write optional headers
             else
             {
-                packetLog.DebugFormat("[{0}] No messages, just sending optional headers", session.LoggingIdentifier);
+                packetLog.DebugFormat("No messages, just sending optional headers");
                 if (writeOptionalHeaders)
                 {
                     writeOptionalHeaders = false;
@@ -890,7 +796,7 @@ public class NetworkSession
         if (bundle.SendAck) // 0x4000
         {
             packetHeader.Flags |= PacketHeaderFlags.AckSequence;
-            packetLog.DebugFormat("[{0}] Outgoing AckSeq: {1}", session.LoggingIdentifier, lastReceivedPacketSequence);
+            packetLog.DebugFormat("Outgoing AckSeq: {0}", lastReceivedPacketSequence);
             packet.InitializeDataWriter();
             packet.DataWriter.Write(lastReceivedPacketSequence);
         }
@@ -898,7 +804,7 @@ public class NetworkSession
         if (bundle.TimeSync) // 0x1000000
         {
             packetHeader.Flags |= PacketHeaderFlags.TimeSync;
-            packetLog.DebugFormat("[{0}] Outgoing TimeSync TS: {1}", session.LoggingIdentifier, Timers.PortalYearTicks);
+            packetLog.DebugFormat("Outgoing TimeSync TS: {0}", Timers.PortalYearTicks);
             packet.InitializeDataWriter();
             packet.DataWriter.Write(Timers.PortalYearTicks);
         }
@@ -906,7 +812,7 @@ public class NetworkSession
         if (bundle.ClientTime != -1f) // 0x4000000
         {
             packetHeader.Flags |= PacketHeaderFlags.EchoResponse;
-            packetLog.DebugFormat("[{0}] Outgoing EchoResponse: {1}", session.LoggingIdentifier, bundle.ClientTime);
+            packetLog.DebugFormat("Outgoing EchoResponse: {0}", bundle.ClientTime);
             packet.InitializeDataWriter();
             packet.DataWriter.Write(bundle.ClientTime);
             packet.DataWriter.Write((float)Timers.PortalYearTicks - bundle.ClientTime);
