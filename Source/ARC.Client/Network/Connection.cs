@@ -22,6 +22,7 @@ using OutboundPacketFragment = ACE.Server.Network.ServerPacketFragment;
 
 using log4net;
 using System.Net;
+using ARC.Client.Network.Packets;
 
 namespace ARC.Client.Network;
 
@@ -385,13 +386,6 @@ public class NetworkSession
     {
         packetLog.DebugFormat("Handling packet {0}", packet.Header.Sequence);
 
-        // If we have an EchoRequest flag, we should flag to respond with an echo response on next send.
-        if (packet.Header.HasFlag(PacketHeaderFlags.EchoRequest))
-        {
-            FlagEcho(packet.HeaderOptional.EchoRequestClientTime);
-            VerifyEcho(packet.HeaderOptional.EchoRequestClientTime);
-        }
-
         // If we have an AcknowledgeSequence flag, we can clear our cached packet buffer up to that sequence.
         if (packet.Header.HasFlag(PacketHeaderFlags.AckSequence))
             AcknowledgeSequence(packet.HeaderOptional.AckSequence);
@@ -405,14 +399,12 @@ public class NetworkSession
             // We will send this at a 20 second time interval.  I don't know what to do with these when we receive them at this point.
         }
 
-        // This should be set on the first packet to the server indicating the client is logging in.
-        // This is the start of a three-way handshake between the client and server (LoginRequest, ConnectRequest, ConnectResponse)
-        // Note this would be sent to each server a client would connect too (Login and each world).
-        // In our current implimenation we handle all roles in this one server.
-        if (packet.Header.HasFlag(PacketHeaderFlags.LoginRequest))
+        // This should be set on the first packet to the client after successful authentication.
+        // This is part of the three-way handshake between the client and server (LoginRequest, ConnectRequest, ConnectResponse)
+        if (packet.Header.HasFlag(PacketHeaderFlags.ConnectRequest))
         {
-            packetLog.Debug("LoginRequest");
-            // AuthenticationHandler.HandleLoginRequest(packet, session);
+            packetLog.Debug("ConnectRequest");
+            HandleConnectRequest(packet);
             return;
         }
 
@@ -423,6 +415,13 @@ public class NetworkSession
         // Update the last received sequence.
         if (packet.Header.Sequence != 0 && packet.Header.Flags != PacketHeaderFlags.AckSequence)
             lastReceivedPacketSequence = packet.Header.Sequence;
+    }
+
+    private void HandleConnectRequest(InboundPacket packet)
+    {
+        var request = new InboundConnectRequest(packet);
+
+        EnqueueSend(new OutboundConnectResponse(request.cookie));
     }
 
     /// <summary>
