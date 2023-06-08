@@ -1,5 +1,6 @@
 using ACE.Server.Network;
 using ACE.Server.Network.Structure;
+using System.Diagnostics;
 using OutboundPacket = ACE.Server.Network.ServerPacket;
 
 namespace ARC.Client.Network.Packets;
@@ -11,6 +12,8 @@ public class OutboundRequestRetransmit : OutboundPacket
 
     public OutboundRequestRetransmit(List<uint> sequenceIds)
     {
+        Debug.Assert(sequenceIds.Count <= MaxSequenceIdCount);
+
         Header.Flags = PacketHeaderFlags.RequestRetransmit;
 
         InitializeDataWriter();

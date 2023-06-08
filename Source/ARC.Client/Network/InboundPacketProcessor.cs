@@ -34,6 +34,7 @@ public class InboundPacketProcessor
     private readonly CryptoSystem cryptoSystem;
 
     private uint lastReceivedPacketSequence = 1;
+    private uint nextOrderedPacketSequenceId = 2;
     private uint lastReceivedFragmentSequence;
 
     private DateTime LastRequestForRetransmitTime = DateTime.MinValue;
@@ -92,17 +93,15 @@ public class InboundPacketProcessor
         // There are some exceptions:
         // Sequence 0 as we have several Seq 0 packets during connect.  This also cathes sequenceId case where it seems CICMDCommand arrives at any point with 0 sequenceId value too.
         // If the only header on the packet is AckSequence. It seems AckSequence can come in with the same sequenceId value sometimes.
-        if (packet.Header.Sequence <= lastReceivedPacketSequence && packet.Header.Sequence != 0 &&
-            !(packet.Header.Flags == PacketHeaderFlags.AckSequence && packet.Header.Sequence == lastReceivedPacketSequence))
+        if (packet.Header.Sequence < nextOrderedPacketSequenceId && packet.Header.Sequence != 0 &&
+            !(packet.Header.Flags == PacketHeaderFlags.AckSequence && packet.Header.Sequence == nextOrderedPacketSequenceId - 1))
         {
             packetLog.WarnFormat("Packet {0} received again", packet.Header.Sequence);
             return;
         }
 
-        // Check if this packet's sequenceId is greater then the next one we should be getting.
-        // If true we must store it to replay once we have caught up.
-        var desiredSeq = lastReceivedPacketSequence + 1;
-        if (packet.Header.Sequence > desiredSeq)
+        // If this packet is out of order, we store it for later
+        if (packet.Header.Sequence > nextOrderedPacketSequenceId)
         {
             packetLog.DebugFormat("Packet {0} received out of order", packet.Header.Sequence);
 
@@ -111,7 +110,8 @@ public class InboundPacketProcessor
                 outOfOrderPackets.TryAdd(packet.Header.Sequence, packet);
             }
 
-            if (packet.Header.Sequence > desiredSeq + 1)
+            // If it's very out of order (2 off), we request retransmission of any missing packets
+            if (packet.Header.Sequence > nextOrderedPacketSequenceId + 1)
             {
                 RequestRetransmission(packet.Header.Sequence);
             }
@@ -123,12 +123,7 @@ public class InboundPacketProcessor
 
         #region Final processing stage
 
-        // Processing stage
-        // If we reach here, this is sequenceId packet we should proceed with processing.
         HandleOrderedPacket(packet);
-
-        // Process data now in sequenceId
-        // Finally check if we have any out of order packets or fragments we need to process;
         CheckOutOfOrderPackets();
         CheckOutOfOrderFragments();
 
@@ -137,21 +132,22 @@ public class InboundPacketProcessor
 
     private void RequestRetransmission(uint receivedSequenceId)
     {
-        if (DateTime.UtcNow - LastRequestForRetransmitTime < new TimeSpan(0, 0, 1))
+        if (DateTime.UtcNow - LastRequestForRetransmitTime < TimeSpan.FromSeconds(1))
         {
             return;
         }
 
-        var nextInSequence = lastReceivedPacketSequence + 1;
         var missingSequenceIds = new List<uint>();
 
-        // The CryptoSystem only searches for encryption keys up to sequenceId certain number of packets ahead
-        if (receivedSequenceId < nextInSequence || receivedSequenceId - nextInSequence > CryptoSystem.MaximumEffortLevel)
-        {
+        if (
+            receivedSequenceId < nextOrderedPacketSequenceId
+            // The CryptoSystem only searches for encryption keys up to sequenceId certain number of packets ahead
+            || receivedSequenceId - nextOrderedPacketSequenceId > CryptoSystem.MaximumEffortLevel
+        ) {
             throw new Exception(SessionTerminationReasonHelper.GetDescription(SessionTerminationReason.AbnormalSequenceReceived));
         }
 
-        for (uint sequenceId = nextInSequence; sequenceId < receivedSequenceId; sequenceId++)
+        for (uint sequenceId = nextOrderedPacketSequenceId; sequenceId < receivedSequenceId; sequenceId++)
         {
             if (!outOfOrderPackets.ContainsKey(sequenceId))
             {
