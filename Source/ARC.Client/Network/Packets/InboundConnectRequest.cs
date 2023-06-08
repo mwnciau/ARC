@@ -5,7 +5,7 @@ public class InboundConnectRequest
 {
     public double serverTime { get; }
     public ulong cookie { get; }
-    public uint clientId { get; }
+    public ushort clientId { get; }
     public byte[] issacServerSeed { get; }
     public byte[] issacClientSeed { get; }
 
@@ -13,7 +13,7 @@ public class InboundConnectRequest
     {
         serverTime = packet.DataReader.ReadDouble();
         cookie = packet.DataReader.ReadUInt64();
-        clientId = packet.DataReader.ReadUInt32();
+        clientId = (ushort)packet.DataReader.ReadUInt32();
         issacServerSeed = packet.DataReader.ReadBytes(4);
         issacClientSeed = packet.DataReader.ReadBytes(4);
     }
