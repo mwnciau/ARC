@@ -23,6 +23,7 @@ using OutboundPacketFragment = ACE.Server.Network.ServerPacketFragment;
 using log4net;
 using System.Net;
 using ARC.Client.Network.Packets;
+using System.Collections.Generic;
 
 namespace ARC.Client.Network;
 
@@ -53,81 +54,62 @@ public class InboundPacketProcessor
     public void Process(InboundPacket packet)
     {
         packetLog.DebugFormat("Processing packet {0}", packet.Header.Sequence);
-        NetworkStatistics.C2S_Packets_Aggregate_Increment();
+        NetworkStatistics.S2C_Packets_Aggregate_Increment();
 
+        // If the packet has an invalid checksum, ignore it
         if (!packet.VerifyCRC(cryptoSystem))
         {
             return;
         }
 
-        // If the client sent sequenceId NAK with sequenceId cleartext CRC then process it
-        if ((packet.Header.Flags & PacketHeaderFlags.RequestRetransmit) == PacketHeaderFlags.RequestRetransmit
-            && !((packet.Header.Flags & PacketHeaderFlags.EncryptedChecksum) == PacketHeaderFlags.EncryptedChecksum))
-        {
-            List<uint> uncached = null;
+        if (packet.Header.HasFlag(PacketHeaderFlags.RequestRetransmit)) {
+            packetCoordinator.Retransmit(packet.HeaderOptional.RetransmitData);
 
-            foreach (uint sequence in packet.HeaderOptional.RetransmitData)
-            {
-                if (!packetCoordinator.Retransmit(sequence))
-                {
-                    uncached ??= new List<uint>();
-                    uncached.Add(sequence);
-                }
-            }
-
-            if (uncached != null)
-            {
-                // Sends sequenceId response packet w/ PacketHeader.RejectRetransmit
-                var packetRejectRetransmit = new PacketRejectRetransmit(uncached);
-                packetCoordinator.EnqueueSend(packetRejectRetransmit);
-            }
-
-            NetworkStatistics.C2S_RequestsForRetransmit_Aggregate_Increment();
-            return; //cleartext crc NAK is never accompanied by additional data needed by the rest of the pipeline
+            // RequestRetransmit packets are never accompanied by additional data
+            return;
         }
 
-        #region Reordering stage
-
-        // Reordering stage
-        // Check if this packet's sequenceId is sequenceId sequenceId which we have already processed.
-        // There are some exceptions:
-        // Sequence 0 as we have several Seq 0 packets during connect.  This also cathes sequenceId case where it seems CICMDCommand arrives at any point with 0 sequenceId value too.
-        // If the only header on the packet is AckSequence. It seems AckSequence can come in with the same sequenceId value sometimes.
-        if (packet.Header.Sequence < nextOrderedPacketSequenceId && packet.Header.Sequence != 0 &&
-            !(packet.Header.Flags == PacketHeaderFlags.AckSequence && packet.Header.Sequence == nextOrderedPacketSequenceId - 1))
-        {
+        if (PacketIsAlreadyProcessed(packet)) {
             packetLog.WarnFormat("Packet {0} received again", packet.Header.Sequence);
+
             return;
         }
 
-        // If this packet is out of order, we store it for later
-        if (packet.Header.Sequence > nextOrderedPacketSequenceId)
-        {
+        if (packet.Header.Sequence > nextOrderedPacketSequenceId) {
             packetLog.DebugFormat("Packet {0} received out of order", packet.Header.Sequence);
-
-            if (!outOfOrderPackets.ContainsKey(packet.Header.Sequence))
-            {
-                outOfOrderPackets.TryAdd(packet.Header.Sequence, packet);
-            }
-
-            // If it's very out of order (2 off), we request retransmission of any missing packets
-            if (packet.Header.Sequence > nextOrderedPacketSequenceId + 1)
-            {
-                RequestRetransmission(packet.Header.Sequence);
-            }
+            StoreOutOfOrderPacket(packet);
 
             return;
         }
-
-        #endregion
-
-        #region Final processing stage
 
         HandleOrderedPacket(packet);
         CheckOutOfOrderPackets();
         CheckOutOfOrderFragments();
+    }
 
-        #endregion
+    private bool PacketIsAlreadyProcessed(InboundPacket packet)
+    {
+        return
+            // Check if we have already processed this packet
+            packet.Header.Sequence < nextOrderedPacketSequenceId
+            // Exception: several sequence 0 packets are used during connection
+            && packet.Header.Sequence != 0
+            // Exception: the sequence for AckSequence packets is sometimes the same as the previous packet
+            && !(packet.Header.HasFlag(PacketHeaderFlags.AckSequence) && packet.Header.Sequence == nextOrderedPacketSequenceId - 1);
+    }
+
+    private void StoreOutOfOrderPacket(InboundPacket packet)
+    {
+        if (!outOfOrderPackets.ContainsKey(packet.Header.Sequence))
+        {
+            outOfOrderPackets.TryAdd(packet.Header.Sequence, packet);
+        }
+
+        // If it's very out of order (2 off), we request retransmission of any missing packets
+        if (packet.Header.Sequence > nextOrderedPacketSequenceId + 1)
+        {
+            RequestRetransmission(packet.Header.Sequence);
+        }
     }
 
     private void RequestRetransmission(uint receivedSequenceId)

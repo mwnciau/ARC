@@ -13,6 +13,8 @@ using ACE.Server.Network.Sequence;
 using System.Buffers;
 using System.Net.Sockets;
 using System.Text;
+using ACE.Server.Network.Packets;
+using Org.BouncyCastle.Asn1.Cmp;
 
 namespace ARC.Client.Network;
 
@@ -198,36 +200,52 @@ public class OutboundPacketCoordinator
         }
     }
 
-    public bool Retransmit(uint sequence)
+    public void Retransmit(List<uint> sequenceIds)
     {
-        if (cachedPackets.TryGetValue(sequence, out var cachedPacket))
+        NetworkStatistics.S2C_RequestsForRetransmit_Aggregate_Increment();
+
+        var missingSequenceIds = new List<uint>();
+        foreach(var sequenceId in sequenceIds)
         {
-            packetLog.DebugFormat("Retransmit {0}", sequence);
+            if (cachedPackets.TryGetValue(sequenceId, out var cachedPacket))
+            {
+                packetLog.DebugFormat("Retransmit {0}", sequenceId);
 
-            if (!cachedPacket.Header.HasFlag(PacketHeaderFlags.Retransmission))
                 cachedPacket.Header.Flags |= PacketHeaderFlags.Retransmission;
+                SendPacketRaw(cachedPacket);
 
-            SendPacketRaw(cachedPacket);
+                continue;
+            }
 
-            return true;
+            LogRetransmitError(sequenceId);
+            missingSequenceIds.Add(sequenceId);
         }
 
+
+        if (missingSequenceIds.Count > 0)
+        {
+            EnqueueSend(new PacketRejectRetransmit(missingSequenceIds));
+        }
+    }
+
+    private void LogRetransmitError(uint sequenceId)
+    {
         if (cachedPackets.Count > 0)
         {
             // This is to catch a race condition between .Count and .Min() and .Max()
             try
             {
-                log.Error($"Retransmit requested packet {sequence} not in cache. Cache range {cachedPackets.Keys.Min()} - {cachedPackets.Keys.Max()}.");
+                log.Error($"Retransmit requested packet {sequenceId} not in cache. Cache range {cachedPackets.Keys.Min()} - {cachedPackets.Keys.Max()}.");
             }
             catch
             {
-                log.Error($"Retransmit requested packet {sequence} not in cache. Cache is empty. Race condition threw exception.");
+                log.Error($"Retransmit requested packet {sequenceId} not in cache. Cache is empty. Race condition threw exception.");
             }
         }
         else
-            log.Error($"Retransmit requested packet {sequence} not in cache. Cache is empty.");
-
-        return false;
+        {
+            log.Error($"Retransmit requested packet {sequenceId} not in cache. Cache is empty.");
+        }
     }
 
     private void FlushPackets()
