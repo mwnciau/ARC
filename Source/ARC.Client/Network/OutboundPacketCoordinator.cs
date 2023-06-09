@@ -12,6 +12,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Text;
+using System.Diagnostics;
 
 namespace ARC.Client.Network;
 
@@ -21,24 +22,31 @@ public class OutboundPacketCoordinator
     private static readonly ILog packetLog = LogManager.GetLogger(System.Reflection.Assembly.GetEntryAssembly(), "Packets");
 
     private readonly Connection connection;
-    public ConnectionData ConnectionData { get; private set; }
+    public ConnectionData? ConnectionData { get; private set; }
 
     private readonly Object[] currentBundleLocks = new Object[(int)GameMessageGroup.QueueMax];
     private readonly NetworkBundle[] currentBundles = new NetworkBundle[(int)GameMessageGroup.QueueMax];
     private readonly ConcurrentQueue<OutboundPacket> packetQueue = new();
 
+    private readonly ConcurrentDictionary<uint, OutboundPacket> cachedPackets = new();
 
-    private readonly ConcurrentDictionary<uint /*seq*/, OutboundPacket> cachedPackets = new();
-
+    /// <summary>
+    /// Time in seconds to retain packets to be resent on request.
+    /// </summary>
     private const int cachedPacketRetentionTime = 120;
     private static readonly TimeSpan cachedPacketPruneInterval = TimeSpan.FromSeconds(5);
     private DateTime lastCachedPacketPruneTime;
 
+    /// <summary>
+    /// Minimum time in milliseconds between bundle sends.
+    /// </summary>
     private const int minimumTimeBetweenBundles = 5; // 5ms
     private DateTime nextSend = DateTime.UtcNow;
 
-    private const int timeBetweenTimeSync = 20000; // 20s
-    private const int timeBetweenAck = 2000; // 2s
+    /// <summary>
+    /// Time in milliseconds between sending Ack packets.
+    /// </summary>
+    private const int timeBetweenAck = 2000;
     private DateTime nextAck = DateTime.UtcNow.AddMilliseconds(timeBetweenAck);
 
     /// <summary>
@@ -67,7 +75,8 @@ public class OutboundPacketCoordinator
             connectRequest.ClientSeed
         );
 
-        SendPacket(new OutboundConnectResponse(connectRequest.Cookie));
+        // Todo: do we need to encrypt this one?
+        SendPacketRaw(new OutboundConnectResponse(connectRequest.Cookie));
     }
 
     /// <summary>
@@ -149,6 +158,104 @@ public class OutboundPacketCoordinator
             cachedPackets.TryRemove(packet.Header.Sequence, out _);
     }
 
+    private void FlushPackets()
+    {
+        Debug.Assert(ConnectionData != null);
+
+        while (packetQueue.TryDequeue(out var packet))
+        {
+            packetLog.DebugFormat("Flushing packets, count {0}", packetQueue.Count);
+
+            if (
+                packet.Header.HasFlag(PacketHeaderFlags.EncryptedChecksum)
+                && ConnectionData.PacketSequence.CurrentValue == 0
+            )
+            {
+                ConnectionData.PacketSequence = new UIntSequence(1);
+            }
+
+            bool isRequestRetransmit = packet.Header.Flags.HasFlag(PacketHeaderFlags.RequestRetransmit);
+
+            // If we are Acking or requesting a retransmit, don't increment the sequence
+            packet.Header.Sequence =
+                (packet.Header.Flags == PacketHeaderFlags.AckSequence || isRequestRetransmit)
+                    ? ConnectionData.PacketSequence.CurrentValue
+                    : packet.Header.Sequence = ConnectionData.PacketSequence.NextValue;
+
+            packet.Header.Id = ConnectionData.ClientId;
+            // Todo: what is this? Extract to constant?
+            packet.Header.Iteration = 0x14;
+            // Todo: handle client time
+            packet.Header.Time = (ushort)Timers.PortalYearTicks;
+
+            // Todo: extract to constant, and does this need to be different for clients?
+            if (packet.Header.Sequence >= 2u && !isRequestRetransmit)
+                cachedPackets.TryAdd(packet.Header.Sequence, packet);
+
+            EncryptPacketChecksum(packet);
+            SendPacketRaw(packet);
+        }
+    }
+
+    private void EncryptPacketChecksum(OutboundPacket packet)
+    {
+        Debug.Assert(ConnectionData != null);
+
+        if (packet.Header.HasFlag(PacketHeaderFlags.EncryptedChecksum))
+        {
+            uint isaacWord = ConnectionData.ClientPacketEncrypter.Next();
+            packetLog.DebugFormat("Setting Isaac for packet {0} to {1}", packet.GetHashCode(), isaacWord);
+            packet.IssacXor = isaacWord;
+        }
+    }
+
+    private void SendPacketRaw(OutboundPacket packet)
+    {
+        packetLog.DebugFormat("Sending packet {0}", packet.GetHashCode());
+        NetworkStatistics.C2S_Packets_Aggregate_Increment();
+
+        // Initialize a buffer that can hold the maximum size of this packet
+        byte[] buffer = ArrayPool<byte>.Shared.Rent((int)(PacketHeader.HeaderSize + (packet.Data?.Length ?? 0) + (packet.Fragments.Count * PacketFragment.MaxFragementSize)));
+
+        var socket = connection.Socket;
+        Debug.Assert(socket.LocalEndPoint != null);
+
+        try
+        {
+            packet.CreateReadyToSendPacket(buffer, out var size);
+
+            packetLog.Debug(packet.ToString());
+
+            if (packetLog.IsDebugEnabled)
+            {
+                var listenerEndpoint = (System.Net.IPEndPoint)socket.LocalEndPoint;
+                var sb = new StringBuilder();
+                sb.AppendLine(String.Format("Sending Packet (Len: {0}) [{1}:{2}]", size, listenerEndpoint.Address, listenerEndpoint.Port));
+                sb.AppendLine(buffer.BuildPacketString(0, size));
+                packetLog.Debug(sb.ToString());
+            }
+
+            try
+            {
+                socket.SendTo(buffer, size, SocketFlags.None, connection.ListenerEndpoint);
+            }
+            catch (SocketException ex)
+            {
+                var listenerEndpoint = (System.Net.IPEndPoint)socket.LocalEndPoint;
+                var sb = new StringBuilder();
+                sb.AppendLine(ex.ToString());
+                sb.AppendLine(String.Format("Sending Packet (Len: {0}) [{1}:{2}]", buffer.Length, listenerEndpoint.Address, listenerEndpoint.Port));
+                log.Error(sb.ToString());
+
+                throw new Exception(SessionTerminationReasonHelper.GetDescription(SessionTerminationReason.SendToSocketException));
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer, true);
+        }
+    }
+
     public void PruneAcknowledgedPackets(uint sequence)
     {
         var removalList = cachedPackets.Keys.Where(x => x < sequence);
@@ -190,15 +297,13 @@ public class OutboundPacketCoordinator
 
     public void Retransmit(List<uint> sequenceIds)
     {
-        NetworkStatistics.S2C_RequestsForRetransmit_Aggregate_Increment();
+        NetworkStatistics.C2S_RequestsForRetransmit_Aggregate_Increment();
 
         var missingSequenceIds = new List<uint>();
         foreach(var sequenceId in sequenceIds)
         {
             if (cachedPackets.TryGetValue(sequenceId, out var cachedPacket))
             {
-                packetLog.DebugFormat("Retransmit {0}", sequenceId);
-
                 cachedPacket.Header.Flags |= PacketHeaderFlags.Retransmission;
                 SendPacketRaw(cachedPacket);
 
@@ -233,94 +338,6 @@ public class OutboundPacketCoordinator
         else
         {
             log.Error($"Retransmit requested packet {sequenceId} not in cache. Cache is empty.");
-        }
-    }
-
-    private void FlushPackets()
-    {
-        while (packetQueue.TryDequeue(out var packet))
-        {
-            packetLog.DebugFormat("Flushing packets, count {0}", packetQueue.Count);
-
-            if (packet.Header.HasFlag(PacketHeaderFlags.EncryptedChecksum) && ConnectionData.PacketSequence.CurrentValue == 0)
-                ConnectionData.PacketSequence = new UIntSequence(1);
-
-            bool isNak = packet.Header.Flags.HasFlag(PacketHeaderFlags.RequestRetransmit);
-
-            // If we are only ACKing, then we don't seem to have to increment the sequence
-            if (packet.Header.Flags == PacketHeaderFlags.AckSequence || isNak)
-                packet.Header.Sequence = ConnectionData.PacketSequence.CurrentValue;
-            else
-                packet.Header.Sequence = ConnectionData.PacketSequence.NextValue;
-            packet.Header.Id = ConnectionData.ClientId;
-            packet.Header.Iteration = 0x14;
-            packet.Header.Time = (ushort)Timers.PortalYearTicks;
-
-            if (packet.Header.Sequence >= 2u && !isNak)
-                cachedPackets.TryAdd(packet.Header.Sequence, packet);
-
-            SendPacket(packet);
-        }
-    }
-
-    public void SendPacket(OutboundPacket packet)
-    {
-        packetLog.DebugFormat("Sending packet {0}", packet.GetHashCode());
-        NetworkStatistics.S2C_Packets_Aggregate_Increment();
-
-        if (packet.Header.HasFlag(PacketHeaderFlags.EncryptedChecksum))
-        {
-            uint issacXor = ConnectionData.ClientPacketEncrypter.Next();
-            packetLog.DebugFormat("Setting Issac for packet {0} to {1}", packet.GetHashCode(), issacXor);
-            packet.IssacXor = issacXor;
-        }
-
-        SendPacketRaw(packet);
-    }
-
-    public void SendPacketRaw(OutboundPacket packet)
-    {
-        byte[] buffer = ArrayPool<byte>.Shared.Rent((int)(PacketHeader.HeaderSize + (packet.Data?.Length ?? 0) + (packet.Fragments.Count * PacketFragment.MaxFragementSize)));
-
-        try
-        {
-            var socket = connection.Socket;
-
-            packet.CreateReadyToSendPacket(buffer, out var size);
-
-            packetLog.Debug(packet.ToString());
-
-            if (packetLog.IsDebugEnabled)
-            {
-                var listenerEndpoint = (System.Net.IPEndPoint)socket.LocalEndPoint;
-                var sb = new StringBuilder();
-                sb.AppendLine(String.Format("Sending Packet (Len: {0}) [{1}:{2}]", size, listenerEndpoint.Address, listenerEndpoint.Port));
-                sb.AppendLine(buffer.BuildPacketString(0, size));
-                packetLog.Debug(sb.ToString());
-            }
-
-            try
-            {
-                socket.SendTo(buffer, size, SocketFlags.None, connection.ListenerEndpoint);
-            }
-            catch (SocketException ex)
-            {
-                // Unhandled Exception: System.Net.Sockets.SocketException: A message sent on a datagram socket was larger than the internal message buffer or some other network limit, or the buffer used to receive a datagram into was smaller than the datagram itself
-                // at System.Net.Sockets.Socket.UpdateStatusAfterSocketErrorAndThrowException(SocketError error, String callerName)
-                // at System.Net.Sockets.Socket.SendTo(Byte[] buffer, Int32 offset, Int32 size, SocketFlags socketFlags, EndPoint remoteEP)
-
-                var listenerEndpoint = (System.Net.IPEndPoint)socket.LocalEndPoint;
-                var sb = new StringBuilder();
-                sb.AppendLine(ex.ToString());
-                sb.AppendLine(String.Format("Sending Packet (Len: {0}) [{1}:{2}]", buffer.Length, listenerEndpoint.Address, listenerEndpoint.Port));
-                log.Error(sb.ToString());
-
-                throw new Exception(SessionTerminationReasonHelper.GetDescription(SessionTerminationReason.SendToSocketException));
-            }
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer, true);
         }
     }
 
