@@ -1,20 +1,17 @@
-using System.Collections.Concurrent;
-
-using log4net;
-
-using ACE.Server.Network.GameMessages;
+using ACE.Server.Entity;
 using ACE.Server.Network;
-
+using ACE.Server.Network.Enum;
+using ACE.Server.Network.GameMessages;
+using ACE.Server.Network.Packets;
+using ACE.Server.Network.Sequence;
+using ARC.Client.Network.Packets;
+using log4net;
 using OutboundPacket = ACE.Server.Network.ServerPacket;
 using OutboundPacketFragment = ACE.Server.Network.ServerPacketFragment;
-using ACE.Server.Entity;
-using ACE.Server.Network.Enum;
-using ACE.Server.Network.Sequence;
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Text;
-using ACE.Server.Network.Packets;
-using Org.BouncyCastle.Asn1.Cmp;
 
 namespace ARC.Client.Network;
 
@@ -24,43 +21,29 @@ public class OutboundPacketCoordinator
     private static readonly ILog packetLog = LogManager.GetLogger(System.Reflection.Assembly.GetEntryAssembly(), "Packets");
 
     private readonly Connection connection;
-    public readonly SessionConnectionData ConnectionData = new SessionConnectionData();
-
-    public ushort ClientId = 0;
+    public ConnectionData ConnectionData { get; private set; }
 
     private readonly Object[] currentBundleLocks = new Object[(int)GameMessageGroup.QueueMax];
     private readonly NetworkBundle[] currentBundles = new NetworkBundle[(int)GameMessageGroup.QueueMax];
     private readonly ConcurrentQueue<OutboundPacket> packetQueue = new();
 
 
-    /// <summary>
-    /// This is referenced from many threads:<para />
-    /// ConnectionListener.OnDataReceieve()->Session.HandlePacket()->This.HandlePacket(packet), This path can come from any client or other thinkable object.<para />
-    /// WorldManager.UpdateWorld()->Session.Update(lastTick)->This.Update(lastTick)
-    /// </summary>
-    private readonly ConcurrentDictionary<uint /*seq*/, OutboundPacket> cachedPackets = new ConcurrentDictionary<uint /*seq*/, OutboundPacket>();
+    private readonly ConcurrentDictionary<uint /*seq*/, OutboundPacket> cachedPackets = new();
 
-    /// <summary>
-    /// Number of seconds to retain cachedPackets
-    /// </summary>
     private const int cachedPacketRetentionTime = 120;
-
     private static readonly TimeSpan cachedPacketPruneInterval = TimeSpan.FromSeconds(5);
     private DateTime lastCachedPacketPruneTime;
 
-    private DateTime nextSend = DateTime.UtcNow;
     private const int minimumTimeBetweenBundles = 5; // 5ms
+    private DateTime nextSend = DateTime.UtcNow;
 
     private const int timeBetweenTimeSync = 20000; // 20s
     private const int timeBetweenAck = 2000; // 2s
-
-    // Resync will be started after ConnectResponse, and should immediately be sent then, so no delay here.
-    // Fun fact: even though we send the server time in the ConnectRequest, client doesn't seem to use it?  Therefore we must TimeSync early so client doesn't see a skew when we send it later.
-    private DateTime? nextResync = null;
-
-    // Ack should be sent after a 2 second delay, so start enabled with the delay.
-    // Sending this too early seems to cause issues with clients disconnecting.
     private DateTime nextAck = DateTime.UtcNow.AddMilliseconds(timeBetweenAck);
+
+    /// <summary>
+    /// Set by the InboundPacketProcessor and used when sending Acks.
+    /// </summary>
     public uint lastReceivedPacketSequence;
 
     public OutboundPacketCoordinator(Connection connection)
@@ -72,6 +55,19 @@ public class OutboundPacketCoordinator
             currentBundleLocks[i] = new object();
             currentBundles[i] = new NetworkBundle();
         }
+    }
+
+    internal void HandleConnectRequest(InboundConnectRequest connectRequest)
+    {
+        // Todo: do something with connectRequest.ServerTime?
+        ConnectionData = new ConnectionData(
+            connectRequest.Cookie,
+            connectRequest.ClientId,
+            connectRequest.ServerSeed,
+            connectRequest.ClientSeed
+        );
+
+        SendPacket(new OutboundConnectResponse(connectRequest.Cookie));
     }
 
     /// <summary>
@@ -95,14 +91,6 @@ public class OutboundPacketCoordinator
 
                 if (group == GameMessageGroup.InvalidQueue)
                 {
-                    if (!currentBundle.TimeSync && nextResync != null && DateTime.UtcNow > nextResync)
-                    {
-                        packetLog.DebugFormat("Setting to send TimeSync packet");
-                        currentBundle.TimeSync = true;
-                        currentBundle.EncryptedChecksum = true;
-                        nextResync = DateTime.UtcNow.AddMilliseconds(timeBetweenTimeSync);
-                    }
-
                     if (!currentBundle.SendAck && DateTime.UtcNow > nextAck)
                     {
                         packetLog.DebugFormat("Setting to send ACK packet");
@@ -230,7 +218,7 @@ public class OutboundPacketCoordinator
 
     private void LogRetransmitError(uint sequenceId)
     {
-        if (cachedPackets.Count > 0)
+        if (!cachedPackets.IsEmpty)
         {
             // This is to catch a race condition between .Count and .Min() and .Max()
             try
@@ -264,7 +252,7 @@ public class OutboundPacketCoordinator
                 packet.Header.Sequence = ConnectionData.PacketSequence.CurrentValue;
             else
                 packet.Header.Sequence = ConnectionData.PacketSequence.NextValue;
-            packet.Header.Id = ClientId;
+            packet.Header.Id = ConnectionData.ClientId;
             packet.Header.Iteration = 0x14;
             packet.Header.Time = (ushort)Timers.PortalYearTicks;
 
@@ -282,7 +270,7 @@ public class OutboundPacketCoordinator
 
         if (packet.Header.HasFlag(PacketHeaderFlags.EncryptedChecksum))
         {
-            uint issacXor = ConnectionData.IssacServer.Next();
+            uint issacXor = ConnectionData.ClientPacketEncrypter.Next();
             packetLog.DebugFormat("Setting Issac for packet {0} to {1}", packet.GetHashCode(), issacXor);
             packet.IssacXor = issacXor;
         }
@@ -348,7 +336,7 @@ public class OutboundPacketCoordinator
 
         bool writeOptionalHeaders = true;
 
-        List<MessageFragment> fragments = new List<MessageFragment>();
+        var fragments = new List<MessageFragment>();
 
         // Pull all messages out and create MessageFragment objects
         while (bundle.HasMoreMessages)
@@ -364,7 +352,7 @@ public class OutboundPacketCoordinator
         // Loop through while we have fragements
         while (fragments.Count > 0 || writeOptionalHeaders)
         {
-            OutboundPacket packet = new OutboundPacket();
+            var packet = new OutboundPacket();
             PacketHeader packetHeader = packet.Header;
 
             if (fragments.Count > 0)
@@ -401,7 +389,7 @@ public class OutboundPacketCoordinator
                     }
 
                     // Create a list to remove completed messages after iterator
-                    List<MessageFragment> removeList = new List<MessageFragment>();
+                    var removeList = new List<MessageFragment>();
 
                     foreach (MessageFragment fragment in fragments)
                     {

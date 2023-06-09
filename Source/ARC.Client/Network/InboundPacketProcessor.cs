@@ -51,7 +51,7 @@ public class InboundPacketProcessor
             return;
         }
 
-        if (PacketIsAlreadyProcessed(packet)) {
+        if (PacketHasAlreadyBeenProcessed(packet)) {
             packetLog.WarnFormat("Packet {0} received again", packet.Header.Sequence);
 
             return;
@@ -69,7 +69,7 @@ public class InboundPacketProcessor
         CheckOutOfOrderFragments();
     }
 
-    private bool PacketIsAlreadyProcessed(InboundPacket packet)
+    private bool PacketHasAlreadyBeenProcessed(InboundPacket packet)
     {
         return
             // Check if we have already processed this packet
@@ -158,12 +158,12 @@ public class InboundPacketProcessor
         // three-way handshake between the client and server (LoginRequest, ConnectRequest, ConnectResponse).
         if (packet.Header.HasFlag(PacketHeaderFlags.ConnectRequest)) {
             packetLog.Debug("ConnectRequest");
-            HandleConnectRequest(packet);
+            packetCoordinator.HandleConnectRequest(new InboundConnectRequest(packet));
 
             return;
         }
 
-        foreach (InboundPacketFragment fragment in packet.Fragments) {
+        foreach (InboundPacketFragment fragment in packet.Fragments.Cast<InboundPacketFragment>()) {
             ProcessFragment(fragment);
         }
 
@@ -171,15 +171,6 @@ public class InboundPacketProcessor
             nextOrderedPacketSequenceId = packet.Header.Sequence + 1;
             packetCoordinator.lastReceivedPacketSequence = packet.Header.Sequence;
         }
-    }
-
-    private void HandleConnectRequest(InboundPacket packet)
-    {
-        var request = new InboundConnectRequest(packet);
-
-        // Todo: create cryptosystems
-        packetCoordinator.ClientId = request.clientId;
-        packetCoordinator.SendPacket(new OutboundConnectResponse(request.cookie));
     }
 
     /// <summary>
@@ -205,8 +196,7 @@ public class InboundPacketProcessor
                     // The buffer is complete, so we can go ahead and handle
                     packetLog.DebugFormat("Buffer {0} is complete", buffer.Sequence);
                     message = buffer.GetMessage();
-                    MessageBuffer removed = null;
-                    partialFragments.TryRemove(fragment.Header.Sequence, out removed);
+                    partialFragments.TryRemove(fragment.Header.Sequence, out _);
                 }
             } else {
                 // No existing buffer, so add sequenceId new one for this fragment sequenceId.
@@ -223,14 +213,13 @@ public class InboundPacketProcessor
             message = new ClientMessage(fragment.Data);
         }
 
-        // If message is not null, we have sequenceId complete message to handle
+        // If message is not null, we have a complete message to handle
         if (message != null) {
             // First check if this message is the next sequenceId, if it is not, add it to our outOfOrderFragments
             if (fragment.Header.Sequence == nextOrderedFragmentSequence) {
                 packetLog.DebugFormat("Handling fragment {0}", fragment.Header.Sequence);
                 HandleFragment(message);
-            }
-            else {
+            } else {
                 packetLog.DebugFormat("Fragment {0} is early, nextOrderedFragmentSequence = {1}", fragment.Header.Sequence, nextOrderedFragmentSequence);
                 outOfOrderFragments.TryAdd(fragment.Header.Sequence, message);
             }
