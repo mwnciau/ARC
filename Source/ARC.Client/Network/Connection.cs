@@ -21,33 +21,35 @@ public class Connection
 
     public IPEndPoint ListenerEndpoint { get; private set; }
 
-    private readonly IPAddress host;
-    private readonly uint port;
+    private readonly IPEndPoint localEndpoint;
+    public readonly IPEndPoint ServerEndpoint;
 
     private readonly byte[] buffer = new byte[InboundPacket.MaxPacketSize];
 
 
-    private readonly InboundPacketProcessor packetProcessor;
+    private InboundPacketProcessor packetProcessor;
 
-    public Connection(IPAddress host, uint port, InboundPacketProcessor packetProcessor)
+    public Connection(IPAddress serverHost, int serverPort, int localPort)
     {
-        log.DebugFormat("Connection ctor, host {0} port {1}", host, port);
+        log.DebugFormat("Connection ctor, {0}", localEndpoint);
 
-        this.host = host;
-        this.port = port;
+        localEndpoint = new IPEndPoint(IPAddress.Any, localPort);
+        ServerEndpoint = new IPEndPoint(serverHost, serverPort);
+    }
+
+    public void SetPacketProcessor(InboundPacketProcessor packetProcessor)
+    {
         this.packetProcessor = packetProcessor;
     }
 
     public void Start()
     {
-        log.DebugFormat("Starting Connection, host {0} port {1}", host, port);
+        log.DebugFormat("Starting Connection, {0}", localEndpoint);
 
         try
         {
-            ListenerEndpoint = new IPEndPoint(host, (int)port);
             Socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            Socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            Socket.Bind(ListenerEndpoint);
+            Socket.Bind(localEndpoint);
             Listen();
         }
         catch (Exception exception)
@@ -63,7 +65,7 @@ public class Connection
 
     public void Shutdown()
     {
-        log.DebugFormat("Shutting down Connection, host {0} port {1}", host, port);
+        log.DebugFormat("Shutting down Connection, {0}", localEndpoint);
 
         if (Socket != null && Socket.IsBound)
             Socket.Close();
@@ -73,7 +75,7 @@ public class Connection
     {
         try
         {
-            EndPoint clientEndPoint = new IPEndPoint(host, 0);
+            EndPoint clientEndPoint = new IPEndPoint(localEndpoint.Address, 0);
             Socket.BeginReceiveFrom(buffer, 0, buffer.Length, SocketFlags.None, ref clientEndPoint, OnDataReceive, Socket);
         }
         catch (SocketException socketException)
@@ -93,10 +95,8 @@ public class Connection
 
         try
         {
-            clientEndPoint = new IPEndPoint(host, 0);
+            clientEndPoint = new IPEndPoint(localEndpoint.Address, 0);
             int dataSize = Socket.EndReceiveFrom(result, ref clientEndPoint);
-
-            IPEndPoint ipEndpoint = (IPEndPoint)clientEndPoint;
 
             // TO-DO: generate ban entries here based on packet rates of endPoint, IP Address, and IP Address Range
 
@@ -106,7 +106,7 @@ public class Connection
                 Buffer.BlockCopy(buffer, 0, data, 0, dataSize);
 
                 var sb = new StringBuilder();
-                sb.AppendLine($"Received Packet (Len: {data.Length}) [{ipEndpoint.Address}:{ipEndpoint.Port}=>{ListenerEndpoint.Address}:{ListenerEndpoint.Port}]");
+                sb.AppendLine($"Received Packet (Len: {data.Length}) [{localEndpoint.Address}:{localEndpoint.Port}=>{ListenerEndpoint.Address}:{ListenerEndpoint.Port}]");
                 sb.AppendLine(data.BuildPacketString());
                 packetLog.Debug(sb.ToString());
             }

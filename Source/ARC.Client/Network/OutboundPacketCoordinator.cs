@@ -13,6 +13,7 @@ using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Text;
 using System.Diagnostics;
+using System.Net;
 
 namespace ARC.Client.Network;
 
@@ -74,9 +75,14 @@ public class OutboundPacketCoordinator
             connectRequest.ServerSeed,
             connectRequest.ClientSeed
         );
+        ConnectionData.PacketSequence = new UIntSequence(1);
 
-        // Todo: do we need to encrypt this one?
-        SendPacketRaw(new OutboundConnectResponse(connectRequest.Cookie));
+        var connectResponse = new OutboundConnectResponse(connectRequest.Cookie);
+        connectResponse.Header.Flags |= PacketHeaderFlags.EncryptedChecksum;
+        connectResponse.Header.Sequence = ConnectionData.PacketSequence.NextValue;
+
+        EncryptPacketChecksum(connectResponse);
+        SendPacketRaw(connectResponse);
     }
 
     /// <summary>
@@ -166,21 +172,13 @@ public class OutboundPacketCoordinator
         {
             packetLog.DebugFormat("Flushing packets, count {0}", packetQueue.Count);
 
-            if (
-                packet.Header.HasFlag(PacketHeaderFlags.EncryptedChecksum)
-                && ConnectionData.PacketSequence.CurrentValue == 0
-            )
-            {
-                ConnectionData.PacketSequence = new UIntSequence(1);
-            }
-
             bool isRequestRetransmit = packet.Header.Flags.HasFlag(PacketHeaderFlags.RequestRetransmit);
 
             // If we are Acking or requesting a retransmit, don't increment the sequence
-            packet.Header.Sequence =
-                (packet.Header.Flags == PacketHeaderFlags.AckSequence || isRequestRetransmit)
-                    ? ConnectionData.PacketSequence.CurrentValue
-                    : packet.Header.Sequence = ConnectionData.PacketSequence.NextValue;
+            packet.Header.Sequence = ConnectionData.PacketSequence.CurrentValue;
+            if (!packet.Header.HasFlag(PacketHeaderFlags.AckSequence) && !isRequestRetransmit) {
+                packet.Header.Sequence = ConnectionData.PacketSequence.NextValue;
+            }
 
             packet.Header.Id = ConnectionData.ClientId;
             // Todo: what is this? Extract to constant?
@@ -189,8 +187,9 @@ public class OutboundPacketCoordinator
             packet.Header.Time = (ushort)Timers.PortalYearTicks;
 
             // Todo: extract to constant, and does this need to be different for clients?
-            if (packet.Header.Sequence >= 2u && !isRequestRetransmit)
+            if (packet.Header.Sequence >= 2u && !isRequestRetransmit) {
                 cachedPackets.TryAdd(packet.Header.Sequence, packet);
+            }
 
             EncryptPacketChecksum(packet);
             SendPacketRaw(packet);
@@ -237,7 +236,7 @@ public class OutboundPacketCoordinator
 
             try
             {
-                socket.SendTo(buffer, size, SocketFlags.None, connection.ListenerEndpoint);
+                socket.SendTo(buffer, size, SocketFlags.None, connection.ServerEndpoint);
             }
             catch (SocketException ex)
             {
@@ -254,6 +253,11 @@ public class OutboundPacketCoordinator
         {
             ArrayPool<byte>.Shared.Return(buffer, true);
         }
+    }
+
+    public void SendLoginRequest(string username, string password)
+    {
+        SendPacketRaw(new OutboundLoginRequest("username", "password"));
     }
 
     public void PruneAcknowledgedPackets(uint sequence)

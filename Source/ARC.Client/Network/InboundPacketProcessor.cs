@@ -28,10 +28,9 @@ public class InboundPacketProcessor
     private readonly ConcurrentDictionary<uint, ClientMessage> outOfOrderFragments = new();
 
 
-    public InboundPacketProcessor(OutboundPacketCoordinator packetCoordinator, CryptoSystem cryptoSystem)
+    public InboundPacketProcessor(OutboundPacketCoordinator packetCoordinator)
     {
         this.packetCoordinator = packetCoordinator;
-        this.cryptoSystem = cryptoSystem;
     }
 
     public void Process(InboundPacket packet)
@@ -40,7 +39,11 @@ public class InboundPacketProcessor
         NetworkStatistics.S2C_Packets_Aggregate_Increment();
 
         // If the packet has an invalid checksum, ignore it
-        if (!packet.VerifyCRC(cryptoSystem)) {
+        // Todo should there be a better way to access this?
+        if (
+            !packet.Header.HasFlag(PacketHeaderFlags.ConnectRequest)
+            &&!packet.VerifyCRC(packetCoordinator.ConnectionData?.ServerCryptoVerifier)
+        ) {
             return;
         }
 
