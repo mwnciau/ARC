@@ -53,7 +53,7 @@ public class OutboundPacketCoordinator
     /// <summary>
     /// Set by the InboundPacketProcessor and used when sending Acks.
     /// </summary>
-    public uint lastReceivedPacketSequence;
+    public uint lastReceivedPacketSequence = 0;
 
     public OutboundPacketCoordinator(Connection connection)
     {
@@ -75,14 +75,9 @@ public class OutboundPacketCoordinator
             connectRequest.ServerSeed,
             connectRequest.ClientSeed
         );
-        ConnectionData.PacketSequence = new UIntSequence(1);
+        ConnectionData.PacketSequence = new UIntSequence(0);
 
-        var connectResponse = new OutboundConnectResponse(connectRequest.Cookie);
-        connectResponse.Header.Flags |= PacketHeaderFlags.EncryptedChecksum;
-        connectResponse.Header.Sequence = ConnectionData.PacketSequence.NextValue;
-
-        EncryptPacketChecksum(connectResponse);
-        SendPacketRaw(connectResponse);
+        EnqueueSend(new OutboundConnectResponse(connectRequest.Cookie));
     }
 
     /// <summary>
@@ -106,7 +101,7 @@ public class OutboundPacketCoordinator
 
                 if (group == GameMessageGroup.InvalidQueue)
                 {
-                    if (!currentBundle.SendAck && DateTime.UtcNow > nextAck)
+                    if (lastReceivedPacketSequence > 0 && currentBundle.SendAck && DateTime.UtcNow > nextAck)
                     {
                         packetLog.DebugFormat("Setting to send ACK packet");
                         currentBundle.SendAck = true;
@@ -210,6 +205,11 @@ public class OutboundPacketCoordinator
 
     private void SendPacketRaw(OutboundPacket packet)
     {
+        IPEndPoint endpoint = connection.ServerEndpoint;
+        if (packet.Header.HasFlag(PacketHeaderFlags.ConnectResponse)) {
+            endpoint = new IPEndPoint(endpoint.Address, endpoint.Port + 1);
+        }
+
         packetLog.DebugFormat("Sending packet {0}", packet.GetHashCode());
         NetworkStatistics.C2S_Packets_Aggregate_Increment();
 
@@ -227,23 +227,21 @@ public class OutboundPacketCoordinator
 
             if (packetLog.IsDebugEnabled)
             {
-                var listenerEndpoint = (System.Net.IPEndPoint)socket.LocalEndPoint;
                 var sb = new StringBuilder();
-                sb.AppendLine(String.Format("Sending Packet (Len: {0}) [{1}:{2}]", size, listenerEndpoint.Address, listenerEndpoint.Port));
+                sb.AppendLine(String.Format("Sending Packet (Len: {0}) [{1}:{2}]", size, endpoint.Address, endpoint.Port));
                 sb.AppendLine(buffer.BuildPacketString(0, size));
                 packetLog.Debug(sb.ToString());
             }
 
             try
             {
-                socket.SendTo(buffer, size, SocketFlags.None, connection.ServerEndpoint);
+                socket.SendTo(buffer, size, SocketFlags.None, endpoint);
             }
             catch (SocketException ex)
             {
-                var listenerEndpoint = (System.Net.IPEndPoint)socket.LocalEndPoint;
                 var sb = new StringBuilder();
                 sb.AppendLine(ex.ToString());
-                sb.AppendLine(String.Format("Sending Packet (Len: {0}) [{1}:{2}]", buffer.Length, listenerEndpoint.Address, listenerEndpoint.Port));
+                sb.AppendLine(String.Format("Sending Packet (Len: {0}) [{1}:{2}]", buffer.Length, endpoint.Address, endpoint.Port));
                 log.Error(sb.ToString());
 
                 throw new Exception(SessionTerminationReasonHelper.GetDescription(SessionTerminationReason.SendToSocketException));
