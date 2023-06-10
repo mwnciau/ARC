@@ -257,7 +257,7 @@ public class OutboundPacketCoordinator
 
     public void SendLoginRequest(string username, string password)
     {
-        SendPacketRaw(new OutboundLoginRequest("username", "password"));
+        SendPacketRaw(new OutboundLoginRequest(username, password));
     }
 
     public void PruneAcknowledgedPackets(uint sequence)

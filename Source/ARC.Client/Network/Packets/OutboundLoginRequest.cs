@@ -10,6 +10,7 @@ using OutboundPacket = ACE.Server.Network.ServerPacket;
 
 namespace ARC.Client.Network.Packets;
 
+/// <see cref="PacketInboundLoginRequest"/>
 public class OutboundLoginRequest : OutboundPacket
 {
     public OutboundLoginRequest(string accountName, string password)
@@ -36,7 +37,7 @@ public class OutboundLoginRequest : OutboundPacket
         // Account to login as, special admin action only
         DataWriter.WriteString16L("");
 
-        DataWriter.Write(password);
+        DataWriter.WriteString32L(password);
 
 
     }

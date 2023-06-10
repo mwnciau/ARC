@@ -19,8 +19,6 @@ public class Connection
 
     public Socket Socket { get; private set; }
 
-    public IPEndPoint ListenerEndpoint { get; private set; }
-
     private readonly IPEndPoint localEndpoint;
     public readonly IPEndPoint ServerEndpoint;
 
@@ -106,7 +104,7 @@ public class Connection
                 Buffer.BlockCopy(buffer, 0, data, 0, dataSize);
 
                 var sb = new StringBuilder();
-                sb.AppendLine($"Received Packet (Len: {data.Length}) [{localEndpoint.Address}:{localEndpoint.Port}=>{ListenerEndpoint.Address}:{ListenerEndpoint.Port}]");
+                sb.AppendLine($"Received Packet (Len: {data.Length}) [{ServerEndpoint.Address}:{ServerEndpoint.Port}=>{localEndpoint.Address}:{localEndpoint.Port}]");
                 sb.AppendLine(data.BuildPacketString());
                 packetLog.Debug(sb.ToString());
             }
