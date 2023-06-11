@@ -20,24 +20,6 @@ namespace ACE.Server.Network
             writer.Pad(CalculatePadMultiple(sizeof(ushort) + (uint)data.Length, 4u));
         }
 
-        /// <see cref="ACE.Common.Extensions.BinaryReaderExtensions.ReadString32L"/>
-        public static void WriteString32L(this BinaryWriter writer, string data)
-        {
-            if (data == null) data = "";
-
-            if (data.Length > 255) {
-                data = "~~" + data;
-            } else if (data.Length > 0) {
-                data = "~" + data;
-            }
-
-            writer.Write((uint)data.Length);
-            writer.Write(System.Text.Encoding.GetEncoding(1252).GetBytes(data));
-
-            // client expects string length to be a multiple of 4 including the 2 bytes for length
-            writer.Pad(CalculatePadMultiple(sizeof(uint) + (uint)data.Length, 4u));
-        }
-
         public static void WritePackedDword(this BinaryWriter writer, uint value)
         {
             if (value <= 32767)
