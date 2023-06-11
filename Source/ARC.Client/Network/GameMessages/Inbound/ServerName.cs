@@ -4,9 +4,9 @@ using ARC.Client.Entity;
 using Character = ARC.Client.Entity.Character;
 using InboundMessage = ACE.Server.Network.ClientMessage;
 
-namespace ARC.Client.Network.GameMessages.Message;
+namespace ARC.Client.Network.GameMessages.Inbound;
 
-public class ServerName : GameMessage
+public class ServerName : InboundGameMessage
 {
     public static new GameMessageOpcode Opcode = GameMessageOpcode.ServerName;
 

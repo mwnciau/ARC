@@ -1,7 +1,7 @@
 using ACE.Server.Network.GameMessages;
 using log4net;
 using System.Reflection;
-using GameMessage = ARC.Client.Network.GameMessages.GameMessage;
+using InboundGameMessage = ARC.Client.Network.GameMessages.InboundGameMessage;
 
 namespace ARC.Client.EventListeners;
 public class PrintGameMessage
@@ -12,7 +12,7 @@ public class PrintGameMessage
     {
         session.GameMessageEventListeners += OnGameMessage;
     }
-    public static void OnGameMessage(GameMessageOpcode opcode, GameMessage message)
+    public static void OnGameMessage(GameMessageOpcode opcode, InboundGameMessage message)
     {
         log.Info(message.ToString());
     }

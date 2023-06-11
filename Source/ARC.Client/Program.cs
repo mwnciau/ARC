@@ -38,7 +38,7 @@ internal class Program
 
         // Register event listeners
         PrintGameMessage.Initialize(session);
-
+        LogCharacterIn.Initialize(session, "user", "Character Name");
 
         connection.Start();
         packetQueue.SendLoginRequest("user", "password");

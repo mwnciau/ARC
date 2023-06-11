@@ -14,6 +14,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Diagnostics;
 using System.Net;
+using MySqlX.XDevAPI;
 
 namespace ARC.Client.Network;
 
@@ -75,7 +76,6 @@ public class OutboundPacketQueue
             connectRequest.ServerSeed,
             connectRequest.ClientSeed
         );
-        ConnectionData.PacketSequence = new UIntSequence(0);
 
         EnqueueSend(new OutboundConnectResponse(connectRequest.Cookie));
     }
@@ -266,13 +266,28 @@ public class OutboundPacketQueue
             cachedPackets.TryRemove(key, out _);
     }
 
+    public void EnqueueSend(params GameMessage[] messages)
+    {
+        if (!connection.IsActive())
+            return;
+
+        foreach (GameMessage message in messages) {
+            var currentBundleLock = currentBundleLocks[(int)message.Group];
+            lock (currentBundleLock) {
+                NetworkBundle currentBundle = currentBundles[(int)message.Group];
+                currentBundle.EncryptedChecksum = true;
+                packetLog.DebugFormat("Enqueuing Message {0}", message.Opcode);
+                currentBundle.Enqueue(message);
+            }
+        }
+    }
+
     public void EnqueueSend(params ServerPacket[] packets)
     {
         if (!connection.IsActive())
             return;
 
-        foreach (var packet in packets)
-        {
+        foreach (var packet in packets) {
             packetLog.DebugFormat("Enqueuing Packet {0}", packet.GetHashCode());
             packetQueue.Enqueue(packet);
         }
@@ -343,7 +358,7 @@ public class OutboundPacketQueue
         {
             var message = bundle.Dequeue();
 
-            var fragment = new MessageFragment(message, ConnectionData.FragmentSequence++);
+            var fragment = new MessageFragment(message, ConnectionData.FragmentSequence.NextValue);
             fragments.Add(fragment);
         }
 

@@ -27,7 +27,7 @@ public static class InboundMessageManager
 
     private static void DefineMessageHandlers()
     {
-        var GameMessageClasses = Assembly.GetExecutingAssembly().GetTypes().Where(t => t.BaseType == typeof(GameMessage));
+        var GameMessageClasses = Assembly.GetExecutingAssembly().GetTypes().Where(t => t.BaseType == typeof(InboundGameMessage));
 
         foreach (var GameMessageClass in GameMessageClasses)
         {
@@ -48,7 +48,7 @@ public static class InboundMessageManager
             // Todo: add these to a queue? Process multithreaded?
             try
             {
-                GameMessage GameMessage = (GameMessage)Activator.CreateInstance(GameMessageClass);
+                InboundGameMessage GameMessage = (InboundGameMessage)Activator.CreateInstance(GameMessageClass);
                 GameMessage.Handle(message, session);
                 session.OnGameMessage(opcode, GameMessage);
             }

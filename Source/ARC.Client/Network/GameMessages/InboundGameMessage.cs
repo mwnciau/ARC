@@ -2,7 +2,7 @@ using ACE.Server.Network.GameMessages;
 using InboundMessage = ACE.Server.Network.ClientMessage;
 
 namespace ARC.Client.Network.GameMessages;
-public abstract class GameMessage
+public abstract class InboundGameMessage
 {
     public static GameMessageOpcode Opcode;
 

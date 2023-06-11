@@ -30,8 +30,8 @@ public class ConnectionData
     /// </summary>
     public byte[] ServerSeed { get; private set; }
 
-    public UIntSequence PacketSequence { get; set; }
-    public uint FragmentSequence { get; set; }
+    public UIntSequence PacketSequence = new(0);
+    public UIntSequence FragmentSequence = new(0);
 
     public CryptoSystem ServerCryptoVerifier;
     public ISAAC ClientPacketEncrypter;
@@ -45,8 +45,6 @@ public class ConnectionData
 
         ServerCryptoVerifier = new CryptoSystem(ServerSeed);
         ClientPacketEncrypter = new ISAAC(ClientSeed);
-
-        PacketSequence = new UIntSequence(false);
     }
 
     public override string ToString()

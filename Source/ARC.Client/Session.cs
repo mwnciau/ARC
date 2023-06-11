@@ -1,7 +1,7 @@
 using ACE.Server.Network.GameMessages;
 using ARC.Client.Entity;
 using ARC.Client.Network;
-using GameMessage = ARC.Client.Network.GameMessages.GameMessage;
+using InboundGameMessage = ARC.Client.Network.GameMessages.InboundGameMessage;
 
 namespace ARC.Client;
 public class Session
@@ -16,9 +16,9 @@ public class Session
         PacketQueue = packetQueue;
     }
 
-    public delegate void GameMessageHandler(GameMessageOpcode opcode, GameMessage message);
+    public delegate void GameMessageHandler(GameMessageOpcode opcode, InboundGameMessage message);
     public event GameMessageHandler? GameMessageEventListeners;
-    public void OnGameMessage(GameMessageOpcode opcode, GameMessage? message)
+    public void OnGameMessage(GameMessageOpcode opcode, InboundGameMessage? message)
     {
         GameMessageEventListeners?.Invoke(opcode, message);
     }
