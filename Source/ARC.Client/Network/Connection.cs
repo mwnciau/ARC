@@ -24,7 +24,6 @@ public class Connection
 
     private readonly byte[] buffer = new byte[InboundPacket.MaxPacketSize];
 
-
     private InboundPacketProcessor packetProcessor;
 
     public Connection(IPAddress serverHost, int serverPort, int localPort, InboundPacketProcessor packetProcessor)

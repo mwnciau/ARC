@@ -6,13 +6,13 @@ using InboundMessage = ACE.Server.Network.ClientMessage;
 
 namespace ARC.Client.Network.GameMessages.Message;
 
-public class GameMessageCharacterList : GameMessage
+public class CharacterList : GameMessage
 {
     public static new GameMessageOpcode Opcode = GameMessageOpcode.CharacterList;
 
     public string? AccountName { get; private set; }
     public uint CharacterSlots{ get; private set; }
-    public List<Character>? CharacterList { get; private set; }
+    public List<Character>? Characters { get; private set; }
     public bool GlobalChatChannelsEnabled { get; private set; }
 
     /// <see cref="ACE.Server.Network.GameMessages.Messages.GameMessageCharacterList"/>
@@ -25,14 +25,14 @@ public class GameMessageCharacterList : GameMessage
 
         int characterCount = reader.ReadInt32();
 
-        CharacterList = new List<Character>();
+        Characters = new List<Character>();
 
         for (int i = 0; i < characterCount; i++) {
             uint characterId = reader.ReadUInt32();
             string characterName = reader.ReadString16L();
             uint deleteTime = reader.ReadUInt32();
 
-            CharacterList.Add(new Character(characterId, characterName, deleteTime));
+            Characters.Add(new Character(characterId, characterName, deleteTime));
         }
 
         // Unused uint32 - always 0
@@ -45,7 +45,7 @@ public class GameMessageCharacterList : GameMessage
 
         // Message ends with `hasThroneOfDestiny` which is always 1
 
-        session.Account = new Account(AccountName, CharacterList, CharacterSlots);
+        session.Account = new Account(AccountName, Characters, CharacterSlots);
         session.GlobalChatChannelsEnabled = GlobalChatChannelsEnabled;
     }
 
@@ -53,12 +53,12 @@ public class GameMessageCharacterList : GameMessage
     {
         string output = $@"
 
-        <<< GameMessageCharacterList [0x{(int)Opcode:X4}:{Opcode}]
+        <<< GameMessage: CharacterList [0x{(int)Opcode:X4}:{Opcode}]
             Account name:         {AccountName}
             Character slots:      {CharacterSlots}
             Global Chat Channels: {GlobalChatChannelsEnabled}
             Characters:";
-        foreach (var character in CharacterList) {
+        foreach (var character in Characters) {
             output += $"\n\t\t{character.Name} // id: {character.Id} deleteTime: {character.DeleteTime}";
         }
         output += "\n";

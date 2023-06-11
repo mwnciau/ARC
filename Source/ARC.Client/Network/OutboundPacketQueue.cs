@@ -101,7 +101,7 @@ public class OutboundPacketQueue
 
                 if (group == GameMessageGroup.InvalidQueue)
                 {
-                    if (lastReceivedPacketSequence > 0 && currentBundle.SendAck && DateTime.UtcNow > nextAck)
+                    if (lastReceivedPacketSequence > 0 && !currentBundle.SendAck && DateTime.UtcNow > nextAck)
                     {
                         packetLog.DebugFormat("Setting to send ACK packet");
                         currentBundle.SendAck = true;
@@ -171,7 +171,7 @@ public class OutboundPacketQueue
 
             // If we are Acking or requesting a retransmit, don't increment the sequence
             packet.Header.Sequence = ConnectionData.PacketSequence.CurrentValue;
-            if (!packet.Header.HasFlag(PacketHeaderFlags.AckSequence) && !isRequestRetransmit) {
+            if (packet.Header.Flags != PacketHeaderFlags.AckSequence && !isRequestRetransmit) {
                 packet.Header.Sequence = ConnectionData.PacketSequence.NextValue;
             }
 
@@ -465,11 +465,10 @@ public class OutboundPacketQueue
 
         if (bundle.ClientTime != -1f) // 0x4000000
         {
-            packetHeader.Flags |= PacketHeaderFlags.EchoResponse;
-            packetLog.DebugFormat("Outgoing EchoResponse: {0}", bundle.ClientTime);
+            packetHeader.Flags |= PacketHeaderFlags.EchoRequest;
+            packetLog.DebugFormat("Outgoing EchoRequest: {0}", bundle.ClientTime);
             packet.InitializeDataWriter();
             packet.DataWriter.Write(bundle.ClientTime);
-            packet.DataWriter.Write((float)Timers.PortalYearTicks - bundle.ClientTime);
         }
     }
 }
