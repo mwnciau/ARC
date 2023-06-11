@@ -1,18 +1,14 @@
-using ACE.Server.Entity.Actions;
-using ACE.Server.Network.GameAction;
 using ARC.Client.Network.GameMessage;
 using GameMessageOpcode = ACE.Server.Network.GameMessages.GameMessageOpcode;
 using InboundMessage = ACE.Server.Network.ClientMessage;
 using log4net;
-using System;
-using System.Collections.Generic;
 using System.Reflection;
 
-namespace ARC.Client.Network.Managers;
+namespace ARC.Client.Network;
 
 public static class InboundMessageManager
 {
-    private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+    private static readonly ILog log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
 
     private class MessageHandlerInfo
     {
@@ -33,10 +29,14 @@ public static class InboundMessageManager
     {
         messageHandlers = new Dictionary<GameMessageOpcode, MessageHandlerInfo>();
 
-        foreach (var type in Assembly.GetExecutingAssembly().GetTypes()) {
-            foreach (var methodInfo in type.GetMethods()) {
-                foreach (var messageHandlerAttribute in methodInfo.GetCustomAttributes<GameMessageAttribute>()) {
-                    var messageHandler = new MessageHandlerInfo() {
+        foreach (var type in Assembly.GetExecutingAssembly().GetTypes())
+        {
+            foreach (var methodInfo in type.GetMethods())
+            {
+                foreach (var messageHandlerAttribute in methodInfo.GetCustomAttributes<GameMessageAttribute>())
+                {
+                    var messageHandler = new MessageHandlerInfo()
+                    {
                         Handler = (MessageHandler)Delegate.CreateDelegate(typeof(MessageHandler), methodInfo),
                         Attribute = messageHandlerAttribute
                     };
@@ -51,15 +51,21 @@ public static class InboundMessageManager
     {
         var opcode = (GameMessageOpcode)message.Opcode;
 
-        if (messageHandlers.TryGetValue(opcode, out var messageHandlerInfo)) {
+        if (messageHandlers.TryGetValue(opcode, out var messageHandlerInfo))
+        {
             // Todo: add these to a queue? Process multithreaded?
-            try {
+            try
+            {
                 messageHandlerInfo.Handler.Invoke(message, session);
-            } catch (Exception ex) {
-                log.Error($"Received GameMessage packet that threw an exception: opcode: 0x{((int)opcode):X4}:{opcode}");
+            }
+            catch (Exception ex)
+            {
+                log.Error($"Received GameMessage packet that threw an exception: opcode: 0x{(int)opcode:X4}:{opcode}");
                 log.Error(ex);
             }
-        } else {
+        }
+        else
+        {
             log.Warn($"Received unhandled fragment opcode: 0x{(int)opcode:X4} - {opcode}");
         }
     }
