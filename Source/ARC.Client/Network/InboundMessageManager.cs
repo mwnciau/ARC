@@ -1,4 +1,4 @@
-using ARC.Client.Network.GameMessage;
+using ARC.Client.Network.GameMessages;
 using GameMessageOpcode = ACE.Server.Network.GameMessages.GameMessageOpcode;
 using InboundMessage = ACE.Server.Network.ClientMessage;
 using log4net;
@@ -18,7 +18,7 @@ public static class InboundMessageManager
 
     public delegate void MessageHandler(InboundMessage message, Session session);
 
-    private static Dictionary<GameMessageOpcode, MessageHandlerInfo> messageHandlers;
+    private static Dictionary<GameMessageOpcode, Type> messageHandlers = new();
 
     public static void Initialize()
     {
@@ -27,23 +27,15 @@ public static class InboundMessageManager
 
     private static void DefineMessageHandlers()
     {
-        messageHandlers = new Dictionary<GameMessageOpcode, MessageHandlerInfo>();
+        var GameMessageClasses = Assembly.GetExecutingAssembly().GetTypes().Where(t => t.BaseType == typeof(GameMessage));
 
-        foreach (var type in Assembly.GetExecutingAssembly().GetTypes())
+        foreach (var GameMessageClass in GameMessageClasses)
         {
-            foreach (var methodInfo in type.GetMethods())
-            {
-                foreach (var messageHandlerAttribute in methodInfo.GetCustomAttributes<GameMessageAttribute>())
-                {
-                    var messageHandler = new MessageHandlerInfo()
-                    {
-                        Handler = (MessageHandler)Delegate.CreateDelegate(typeof(MessageHandler), methodInfo),
-                        Attribute = messageHandlerAttribute
-                    };
 
-                    messageHandlers[messageHandlerAttribute.Opcode] = messageHandler;
-                }
-            }
+            var field = GameMessageClass.GetField("Opcode");
+            GameMessageOpcode opcode = (GameMessageOpcode)field.GetValue(null);
+
+            messageHandlers[opcode] = GameMessageClass;
         }
     }
 
@@ -51,12 +43,14 @@ public static class InboundMessageManager
     {
         var opcode = (GameMessageOpcode)message.Opcode;
 
-        if (messageHandlers.TryGetValue(opcode, out var messageHandlerInfo))
+        if (messageHandlers.TryGetValue(opcode, out var GameMessageClass))
         {
             // Todo: add these to a queue? Process multithreaded?
             try
             {
-                messageHandlerInfo.Handler.Invoke(message, session);
+                GameMessage GameMessage = (GameMessage)Activator.CreateInstance(GameMessageClass);
+                GameMessage.Handle(message, session);
+                session.OnGameMessage(opcode, GameMessage);
             }
             catch (Exception ex)
             {

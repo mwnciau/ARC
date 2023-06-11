@@ -1,0 +1,82 @@
+2023-06-11 12:26:25,652 DEBUG: <<< Seq: 0 Id: 0 Iter: 0 CRC: 354462903 LoginRequest
+
+2023-06-11 12:26:25,656 DEBUG: >>> Seq: 0 Id: 11 Iter: 20 CRC: 1767650099 ConnectRequest
+
+2023-06-11 12:26:25,708 DEBUG: <<< Seq: 0 Id: 0 Iter: 20 CRC: 2446193956 ConnectResponse, 127.0.0.1:40390
+
+2023-06-11 12:26:25,708 DEBUG: [Unverified] Setting to send TimeSync packet
+2023-06-11 12:26:25,708 DEBUG: [Unverified] No messages, just sending optional headers
+2023-06-11 12:26:25,708 DEBUG: [Unverified] Outgoing TimeSync TS: 200600785.13968593
+2023-06-11 12:26:25,708 DEBUG: >>> Seq: 2 Id: 11 Iter: 20 XCRC: 4279891094 EncryptedChecksum | TimeSync CRC: 2362302391 XOR: 3048533345
+
+2023-06-11 12:26:25,709 DEBUG: [Unverified] Enqueuing Message CharacterList
+2023-06-11 12:26:25,710 DEBUG: [Unverified] Enqueuing Message ServerName
+2023-06-11 12:26:25,710 DEBUG: [Unverified] Enqueuing Message DDD_Interrogation
+
+2023-06-11 12:26:25,711 DEBUG: <<< Seq: 1 Id: 0 Iter: 20 CRC: 3138040036 AckSequence AckSeq: 2
+2023-06-11 12:26:25,712 DEBUG: [Unverified] Received AckSequence [sequence: 2]
+
+[DDD_Interrogation]
+2023-06-11 12:26:25,714 DEBUG: [Unverified] Bundle Fragment Count: 1
+2023-06-11 12:26:25,714 DEBUG: >>> Seq: 3 Id: 11 Iter: 20 XCRC: 3141314025 EncryptedChecksum | BlobFragments CRC: 674523401 XOR: 2470167328
+
+2023-06-11 12:26:25,719 DEBUG: [Unverified] Processing packet 2
+2023-06-11 12:26:25,719 DEBUG:   << Received fragment [0xF7E6:DDD_InterrogationResponse]
+
+2023-06-11 12:26:25,720 DEBUG: [Unverified] Enqueuing Message DDD_EndDDD
+
+[DDD_EndDDD]
+2023-06-11 12:26:25,720 DEBUG: [Unverified] Bundle Fragment Count: 1
+2023-06-11 12:26:25,720 DEBUG: >>> Seq: 4 Id: 11 Iter: 20 XCRC: 4052728432 EncryptedChecksum | BlobFragments CRC: 671377650 XOR: 3381968518
+
+[CharacterList, ServerName]
+2023-06-11 12:26:25,726 DEBUG: [Unverified] Bundle Fragment Count: 2
+2023-06-11 12:26:25,726 DEBUG: >>> Seq: 5 Id: 11 Iter: 20 XCRC: 3484652634 EncryptedChecksum | BlobFragments CRC: 3757174144 XOR: 533094122
+
+2023-06-11 12:26:25,830 DEBUG: [Unverified] Processing packet 3
+2023-06-11 12:26:25,830 DEBUG:   << Received fragment [0xF7EA:DDD_EndDDD]
+
+2023-06-11 12:26:27,652 DEBUG: [Unverified] Setting to send ACK packet
+2023-06-11 12:26:27,652 DEBUG: [Unverified] No messages, just sending optional headers
+2023-06-11 12:26:27,652 DEBUG: [Unverified] Outgoing AckSeq: 3
+2023-06-11 12:26:27,652 DEBUG: >>> Seq: 5 Id: 11 Iter: 20 CRC: 2816258292 AckSequence
+
+2023-06-11 12:26:27,710 DEBUG: [Unverified] Processing packet 4
+2023-06-11 12:26:27,710 DEBUG: [Unverified] Received AckSequence [sequence: 5]
+2023-06-11 12:26:29,653 DEBUG: [Unverified] Setting to send ACK packet
+2023-06-11 12:26:29,653 DEBUG: [Unverified] No messages, just sending optional headers
+2023-06-11 12:26:29,653 DEBUG: [Unverified] Outgoing AckSeq: 4
+2023-06-11 12:26:29,653 DEBUG: >>> Seq: 5 Id: 11 Iter: 20 CRC: 2816389365 AckSequence
+
+2023-06-11 12:26:29,710 DEBUG: [Unverified] Processing packet 5
+2023-06-11 12:26:29,710 DEBUG: [Unverified] Received echo request [clientTime: 5.377059]
+2023-06-11 12:26:29,710 DEBUG: [Unverified] Received AckSequence [sequence: 5]
+2023-06-11 12:26:29,710 DEBUG: [Unverified] Incoming TimeSync TS: 200600789.14029354
+
+2023-06-11 12:26:29,710 DEBUG: [Unverified] No messages, just sending optional headers
+2023-06-11 12:26:29,710 DEBUG: [Unverified] Outgoing EchoResponse: 5.377059
+2023-06-11 12:26:29,710 DEBUG: >>> Seq: 6 Id: 11 Iter: 20 XCRC: 2888218908 EncryptedChecksum | EchoResponse CRC: 969789603 XOR: 2378110863
+
+2023-06-11 12:26:31,653 DEBUG: [Unverified] Setting to send ACK packet
+2023-06-11 12:26:31,653 DEBUG: [Unverified] No messages, just sending optional headers
+2023-06-11 12:26:31,653 DEBUG: [Unverified] Outgoing AckSeq: 5
+2023-06-11 12:26:31,653 DEBUG: >>> Seq: 6 Id: 11 Iter: 20 CRC: 2816520439 AckSequence
+
+2023-06-11 12:26:31,710 DEBUG: [Unverified] Processing packet 6
+2023-06-11 12:26:31,710 DEBUG: [Unverified] Received echo request [clientTime: 7.3770847]
+2023-06-11 12:26:31,710 DEBUG: [Unverified] Received AckSequence [sequence: 6]
+2023-06-11 12:26:31,710 DEBUG: [Unverified] Incoming TimeSync TS: 200600791.14031214
+2023-06-11 12:26:31,711 DEBUG: [Unverified] No messages, just sending optional headers
+2023-06-11 12:26:31,711 DEBUG: [Unverified] Outgoing EchoResponse: 7.3770847
+2023-06-11 12:26:31,711 DEBUG: >>> Seq: 7 Id: 11 Iter: 20 XCRC: 3951796749 EncryptedChecksum | EchoResponse CRC: 974115034 XOR: 2979819253
+
+2023-06-11 12:26:33,104 DEBUG: [Unverified] Processing packet 0
+2023-06-11 12:26:33,104 DEBUG: <<< Seq: 0 Id: 0 Iter: 20 CRC: 3137728733 Disconnect
+
+2023-06-11 12:26:33,654 DEBUG: [Unverified] Setting to send ACK packet
+2023-06-11 12:26:33,654 DEBUG: [Unverified] No messages, just sending optional headers
+2023-06-11 12:26:33,654 DEBUG: [Unverified] Outgoing AckSeq: 6
+2023-06-11 12:26:33,654 DEBUG: >>> Seq: 7 Id: 11 Iter: 20 CRC: 2816651513 AckSequence
+
+2023-06-11 12:26:35,105 INFO : Session 0\127.0.0.1:40390 dropped. Account: user, Player: , Reason: PacketHeader Disconnect
+2023-06-11 12:26:35,105 DEBUG: Removing session for 127.0.0.1:40390 with id 0

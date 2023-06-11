@@ -1,5 +1,6 @@
 using ACE.Server;
 using ACE.Server.Command;
+using ARC.Client.EventListeners;
 using ARC.Client.Network;
 using ARC.Client.Network.Packets;
 using log4net;
@@ -26,16 +27,21 @@ internal class Program
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
         setupLogger();
 
+        InboundMessageManager.Initialize();
 
         log.Info("Connecting to server...");
+        var session = new Session();
+        var packetProcessor = new InboundPacketProcessor(session);
+        var connection = new Connection(IPAddress.Parse("127.0.0.1"), 9100, 9000, packetProcessor);
+        var packetQueue = new OutboundPacketQueue(connection);
+        session.setPacketQueue(packetQueue);
 
-        var connection = new Connection(IPAddress.Parse("127.0.0.1"), 9100, 9000);
-        var packetCoordinator = new OutboundPacketCoordinator(connection);
-        var packetProcessor = new InboundPacketProcessor(packetCoordinator);
-        connection.SetPacketProcessor(packetProcessor);
+        // Register event listeners
+        PrintGameMessage.Initialize(session);
+
 
         connection.Start();
-        packetCoordinator.SendLoginRequest("user", "password");
+        packetQueue.SendLoginRequest("user", "password");
 
 
         log.Info("Initializing CommandManager...");
@@ -43,8 +49,8 @@ internal class Program
 
         while (true) {
             Thread.Sleep(100);
-            if (packetCoordinator.ConnectionData != null) {
-                packetCoordinator.Update();
+            if (packetQueue.ConnectionData != null) {
+                packetQueue.Update();
             }
         }
     }

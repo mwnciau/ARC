@@ -1,8 +1,8 @@
 using ACE.Server.Network;
 
-namespace ARC.Client.Network;
+namespace ARC.Client.Extensions;
 
-public static class Extensions
+public static class BinaryWriterExtensions
 {
     /// <see cref="ACE.Server.Network.Extensions.CalculatePadMultiple"/>
     private static uint CalculatePadMultiple(uint length, uint multiple) { return multiple * ((length + multiple - 1u) / multiple) - length; }
@@ -12,9 +12,12 @@ public static class Extensions
     {
         if (data == null) data = "";
 
-        if (data.Length > 255) {
+        if (data.Length > 255)
+        {
             data = "~~" + data;
-        } else if (data.Length > 0) {
+        }
+        else if (data.Length > 0)
+        {
             data = "~" + data;
         }
 

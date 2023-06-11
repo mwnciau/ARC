@@ -17,7 +17,7 @@ using System.Net;
 
 namespace ARC.Client.Network;
 
-public class OutboundPacketCoordinator
+public class OutboundPacketQueue
 {
     private static readonly ILog log = LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
     private static readonly ILog packetLog = LogManager.GetLogger(System.Reflection.Assembly.GetEntryAssembly(), "Packets");
@@ -55,7 +55,7 @@ public class OutboundPacketCoordinator
     /// </summary>
     public uint lastReceivedPacketSequence = 0;
 
-    public OutboundPacketCoordinator(Connection connection)
+    public OutboundPacketQueue(Connection connection)
     {
         this.connection = connection;
 
@@ -264,25 +264,6 @@ public class OutboundPacketCoordinator
 
         foreach (var key in removalList)
             cachedPackets.TryRemove(key, out _);
-    }
-
-    public void EnqueueSend(params GameMessage[] messages)
-    {
-        if (!connection.IsActive())
-            return;
-
-        foreach (var message in messages)
-        {
-            var grp = message.Group;
-            var currentBundleLock = currentBundleLocks[(int)grp];
-            lock (currentBundleLock)
-            {
-                var currentBundle = currentBundles[(int)grp];
-                currentBundle.EncryptedChecksum = true;
-                packetLog.DebugFormat("Enqueuing Message {0}", message.Opcode);
-                currentBundle.Enqueue(message);
-            }
-        }
     }
 
     public void EnqueueSend(params ServerPacket[] packets)

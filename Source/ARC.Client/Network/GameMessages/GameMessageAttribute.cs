@@ -2,7 +2,7 @@ using System;
 using ACE.Server.Network.Enum;
 using ACE.Server.Network.GameMessages;
 
-namespace ARC.Client.Network.GameMessage;
+namespace ARC.Client.Network.GameMessages;
 
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
 public class GameMessageAttribute : Attribute

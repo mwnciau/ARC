@@ -15,7 +15,6 @@ public class InboundPacketProcessor
 {
     private static readonly ILog packetLog = LogManager.GetLogger(System.Reflection.Assembly.GetEntryAssembly(), "Packets");
 
-    private readonly OutboundPacketCoordinator packetCoordinator;
     private readonly CryptoSystem cryptoSystem;
 
     private uint nextOrderedPacketSequenceId = 2;
@@ -27,10 +26,11 @@ public class InboundPacketProcessor
     private readonly ConcurrentDictionary<uint, MessageBuffer> partialFragments = new();
     private readonly ConcurrentDictionary<uint, ClientMessage> outOfOrderFragments = new();
 
+    private readonly Session session;
 
-    public InboundPacketProcessor(OutboundPacketCoordinator packetCoordinator)
+    public InboundPacketProcessor(Session session)
     {
-        this.packetCoordinator = packetCoordinator;
+        this.session = session;
     }
 
     public void Process(InboundPacket packet)
@@ -42,13 +42,13 @@ public class InboundPacketProcessor
         // Todo should there be a better way to access this?
         if (
             !packet.Header.HasFlag(PacketHeaderFlags.ConnectRequest)
-            &&!packet.VerifyCRC(packetCoordinator.ConnectionData?.ServerCryptoVerifier)
+            &&!packet.VerifyCRC(session.PacketQueue.ConnectionData?.ServerCryptoVerifier)
         ) {
             return;
         }
 
         if (packet.Header.HasFlag(PacketHeaderFlags.RequestRetransmit)) {
-            packetCoordinator.Retransmit(packet.HeaderOptional.RetransmitData);
+            session.PacketQueue.Retransmit(packet.HeaderOptional.RetransmitData);
 
             // RequestRetransmit packets are never accompanied by additional data
             return;
@@ -111,7 +111,7 @@ public class InboundPacketProcessor
 
         List<uint> sequenceIds = MissingSequenceIdsUpTo(receivedSequenceId);
 
-        packetCoordinator.EnqueueSend(new OutboundRequestRetransmit(sequenceIds));
+        session.PacketQueue.EnqueueSend(new OutboundRequestRetransmit(sequenceIds));
         LastRequestForRetransmitTime = DateTime.UtcNow;
 
         packetLog.DebugFormat("Requested retransmit of {0}", sequenceIds.Select(k => k.ToString()).Aggregate((a, b) => a + ", " + b));
@@ -146,7 +146,7 @@ public class InboundPacketProcessor
 
         // If we have an AckSequence flag, we can clear our cached packet buffer up to that sequenceId
         if (packet.Header.HasFlag(PacketHeaderFlags.AckSequence)) {
-            packetCoordinator.PruneAcknowledgedPackets(packet.HeaderOptional.AckSequence);
+            session.PacketQueue.PruneAcknowledgedPackets(packet.HeaderOptional.AckSequence);
         }
 
         if (packet.Header.HasFlag(PacketHeaderFlags.TimeSync)) {
@@ -161,7 +161,7 @@ public class InboundPacketProcessor
         // three-way handshake between the client and server (LoginRequest, ConnectRequest, ConnectResponse).
         if (packet.Header.HasFlag(PacketHeaderFlags.ConnectRequest)) {
             packetLog.Debug("ConnectRequest");
-            packetCoordinator.HandleConnectRequest(new InboundConnectRequest(packet));
+            session.PacketQueue.HandleConnectRequest(new InboundConnectRequest(packet));
 
             return;
         }
@@ -172,7 +172,7 @@ public class InboundPacketProcessor
 
         if (packet.Header.Sequence != 0 && packet.Header.Flags != PacketHeaderFlags.AckSequence) {
             nextOrderedPacketSequenceId = packet.Header.Sequence + 1;
-            packetCoordinator.lastReceivedPacketSequence = packet.Header.Sequence;
+            session.PacketQueue.lastReceivedPacketSequence = packet.Header.Sequence;
         }
     }
 
@@ -231,8 +231,7 @@ public class InboundPacketProcessor
 
     private void HandleFragment(ClientMessage message)
     {
-        // Todo
-        //InboundMessageManager.HandleClientMessage(message, session);
+        InboundMessageManager.HandleInboundMessage(message, session);
         packetLog.DebugFormat("Received fragment with opcode {0}", message.Opcode);
         nextOrderedFragmentSequence++;
     }

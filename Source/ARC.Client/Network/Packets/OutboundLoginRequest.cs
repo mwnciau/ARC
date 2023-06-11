@@ -1,11 +1,7 @@
-using ACE.Database.Models.Auth;
 using ACE.Entity.Enum;
-using ACE.Server.Entity;
 using ACE.Server.Network;
 using ACE.Server.Network.Enum;
-using Google.Protobuf.WellKnownTypes;
-using Org.BouncyCastle.Bcpg;
-using System.Net.Sockets;
+using ARC.Client.Extensions;
 using OutboundPacket = ACE.Server.Network.ServerPacket;
 
 namespace ARC.Client.Network.Packets;
@@ -38,7 +34,5 @@ public class OutboundLoginRequest : OutboundPacket
         DataWriter.WriteString16L("");
 
         DataWriter.WriteString32L(password);
-
-
     }
 }

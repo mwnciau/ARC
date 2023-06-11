@@ -409,15 +409,17 @@ namespace ACE.Server.Network
             packetLog.DebugFormat("[{0}] Handling packet {1}", session.LoggingIdentifier, packet.Header.Sequence);
 
             // If we have an EchoRequest flag, we should flag to respond with an echo response on next send.
-            if (packet.Header.HasFlag(PacketHeaderFlags.EchoRequest))
-            {
+            if (packet.Header.HasFlag(PacketHeaderFlags.EchoRequest)) {
+                packetLog.DebugFormat("[{0}] Received echo request [clientTime: {1}]", session.LoggingIdentifier, packet.HeaderOptional.EchoRequestClientTime);
                 FlagEcho(packet.HeaderOptional.EchoRequestClientTime);
                 VerifyEcho(packet.HeaderOptional.EchoRequestClientTime);
             }
 
             // If we have an AcknowledgeSequence flag, we can clear our cached packet buffer up to that sequence.
-            if (packet.Header.HasFlag(PacketHeaderFlags.AckSequence))
+            if (packet.Header.HasFlag(PacketHeaderFlags.AckSequence)) {
+                packetLog.DebugFormat("[{0}] Received AckSequence [sequence: {1}]", session.LoggingIdentifier, packet.HeaderOptional.AckSequence);
                 AcknowledgeSequence(packet.HeaderOptional.AckSequence);
+            }
 
             if (packet.Header.HasFlag(PacketHeaderFlags.TimeSync))
             {
@@ -519,6 +521,8 @@ namespace ACE.Server.Network
         /// <param name="message">ClientMessage to process</param>
         private void HandleFragment(ClientMessage message)
         {
+            var opcode = (GameMessageOpcode)message.Opcode;
+            packetLog.Debug($"  << Received fragment [0x{(int)opcode:X4}:{opcode}]");
             InboundMessageManager.HandleClientMessage(message, session);
             lastReceivedFragmentSequence++;
         }

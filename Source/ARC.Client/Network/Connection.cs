@@ -27,16 +27,12 @@ public class Connection
 
     private InboundPacketProcessor packetProcessor;
 
-    public Connection(IPAddress serverHost, int serverPort, int localPort)
+    public Connection(IPAddress serverHost, int serverPort, int localPort, InboundPacketProcessor packetProcessor)
     {
         log.DebugFormat("Connection ctor, {0}", localEndpoint);
 
         localEndpoint = new IPEndPoint(IPAddress.Any, localPort);
         ServerEndpoint = new IPEndPoint(serverHost, serverPort);
-    }
-
-    public void SetPacketProcessor(InboundPacketProcessor packetProcessor)
-    {
         this.packetProcessor = packetProcessor;
     }
 
@@ -65,8 +61,9 @@ public class Connection
     {
         log.DebugFormat("Shutting down Connection, {0}", localEndpoint);
 
-        if (Socket != null && Socket.IsBound)
+        if (Socket != null && Socket.IsBound) {
             Socket.Close();
+        }
     }
 
     private void Listen()
@@ -136,9 +133,10 @@ public class Connection
             }
         }
 
-        if (result.CompletedSynchronously)
+        if (result.CompletedSynchronously) {
             Task.Run(() => Listen());
-        else
+        } else {
             Listen();
+        }
     }
 }
