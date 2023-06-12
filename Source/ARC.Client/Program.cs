@@ -55,6 +55,8 @@ internal class Program
         }
     }
 
+    private static uint CurrentConsolePosition = 0;
+
     static void setupLogger()
     {
         var exeLocation = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);

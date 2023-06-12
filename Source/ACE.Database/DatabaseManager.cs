@@ -16,7 +16,7 @@ namespace ACE.Database
 
         public static SerializedShardDatabase Shard { get; private set; }
 
-        public static ShardConfigDatabase ShardConfig { get; } = new ShardConfigDatabase();
+        public static ShardConfigDatabase ShardConfig { get; set; } = new ShardConfigDatabase();
 
         public static bool InitializationFailure = false;
 

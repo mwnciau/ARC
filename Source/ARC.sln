@@ -64,7 +64,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docker", "Docker", "{60DC64
 		..\Dockerfile.arm64 = ..\Dockerfile.arm64
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ARC.Client", "ARC.Client\ARC.Client.csproj", "{75E24F72-B0B0-4B85-83AD-627BEFB20665}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ARC.Client", "ARC.Client\ARC.Client.csproj", "{75E24F72-B0B0-4B85-83AD-627BEFB20665}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ARC.Client.Tests", "ARC.Client.Tests\ARC.Client.Tests.csproj", "{4AE465BC-1E9C-4478-8C99-4043B73739DA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -154,6 +156,14 @@ Global
 		{75E24F72-B0B0-4B85-83AD-627BEFB20665}.Release|Any CPU.Build.0 = Release|Any CPU
 		{75E24F72-B0B0-4B85-83AD-627BEFB20665}.Release|x64.ActiveCfg = Release|Any CPU
 		{75E24F72-B0B0-4B85-83AD-627BEFB20665}.Release|x64.Build.0 = Release|Any CPU
+		{4AE465BC-1E9C-4478-8C99-4043B73739DA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4AE465BC-1E9C-4478-8C99-4043B73739DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4AE465BC-1E9C-4478-8C99-4043B73739DA}.Debug|x64.ActiveCfg = Debug|x64
+		{4AE465BC-1E9C-4478-8C99-4043B73739DA}.Debug|x64.Build.0 = Debug|x64
+		{4AE465BC-1E9C-4478-8C99-4043B73739DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4AE465BC-1E9C-4478-8C99-4043B73739DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4AE465BC-1E9C-4478-8C99-4043B73739DA}.Release|x64.ActiveCfg = Release|Any CPU
+		{4AE465BC-1E9C-4478-8C99-4043B73739DA}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

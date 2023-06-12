@@ -175,7 +175,7 @@ public class OutboundPacketQueue
                 packet.Header.Sequence = ConnectionData.PacketSequence.NextValue;
             }
 
-            packet.Header.Id = ConnectionData.ClientId;
+            packet.Header.Id = (ushort)ConnectionData.ClientId;
             // Todo: what is this? Extract to constant?
             packet.Header.Iteration = 0x14;
             // Todo: handle client time
