@@ -1,8 +1,6 @@
 using ACE.Database.Models.Shard;
 using ACE.Entity.Enum.Properties;
-using ACE.Server.Network;
 using ACE.Server.Network.GameMessages.Messages;
-using ACE.Server.WorldObjects;
 using ARC.Client.Network.GameMessages.Inbound;
 using ARC.Client.Tests.Support;
 using Moq;
