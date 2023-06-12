@@ -10,9 +10,9 @@ public class ServerName : InboundGameMessage
 {
     public static new GameMessageOpcode Opcode = GameMessageOpcode.ServerName;
 
-    public int CurrentConnections;
-    public int MaxConnections;
-    public string Name;
+    public int CurrentConnections { get; private set; }
+    public int MaxConnections { get; private set; }
+    public string Name { get; private set; }
 
     /// <see cref="ACE.Server.Network.GameMessages.Messages.GameMessageServerName"/>
     public override void Handle(InboundMessage message, Session session)

@@ -1,13 +1,12 @@
-using ACE.Database;
 using ACE.Database.Models.Shard;
-using ACE.Server.Managers;
+using ACE.Entity.Enum.Properties;
 using ACE.Server.Network;
 using ACE.Server.Network.GameMessages.Messages;
+using ACE.Server.WorldObjects;
 using ARC.Client.Network.GameMessages.Inbound;
 using ARC.Client.Tests.Support;
 using Moq;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using InboundMessage = ACE.Server.Network.ClientMessage;
 using OutboundGameMessage = ACE.Server.Network.GameMessages.GameMessage;
@@ -25,22 +24,10 @@ public class InboundGameMessages : TestCase
         return inboundMessage;
     }
 
-    private Mock<ServerSession> mockServerSession()
-    {
-        var serverSessionMock = new Mock<ServerSession>(
-            new ConnectionListener(IPAddress.Any, 9000),
-            new IPEndPoint(IPAddress.Any, 9000),
-            (ushort)0,
-            (ushort)0
-        );
-
-        return serverSessionMock;
-    }
-
     [TestMethod]
     public void CharacterList()
     {
-        Mock<ServerSession> serverSessionMock = mockServerSession();
+        Mock<ServerSession> serverSessionMock = ClassFactory.MockServerSession();
 
         MockShardConfig shardConfig = new MockShardConfig();
         shardConfig
@@ -86,4 +73,38 @@ public class InboundGameMessages : TestCase
         Assert.AreEqual(currentConnections, serverNameMessage.CurrentConnections);
         Assert.AreEqual(maxConnections, serverNameMessage.MaxConnections);
     }
+
+    public void GameEvent()
+    { }
+
+    public void ServerMessage()
+    { }
+
+    [TestMethod]
+    public void PrivateUpdatePropertyInt()
+    {
+        PropertyInt property = PropertyInt.AccountRequirements;
+        int value = 10;
+
+        InboundMessage inboundMessage = convertToInboundMessage(new GameMessagePrivateUpdatePropertyInt(
+            ClassFactory.WorldObject(),
+            property,
+            value
+        ));
+
+        PrivateUpdatePropertyInt updatePropertyIntMessage = new();
+        updatePropertyIntMessage.Handle(inboundMessage, new Session());
+
+        Assert.AreEqual(property, updatePropertyIntMessage.Property);
+        Assert.AreEqual(value, updatePropertyIntMessage.Value);
+    }
+
+    public void PlayerCreate()
+    { }
+
+    public void ObjectCreate()
+    { }
+
+    public void PlayEffect()
+    { }
 }
