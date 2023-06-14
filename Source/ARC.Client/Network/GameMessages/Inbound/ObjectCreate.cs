@@ -32,7 +32,7 @@ public class ObjectCreate : InboundGameMessage
         // GameEventMessage so here they should be set.
         deserializeModelData(reader);
         deserializePhysicsData(reader);
-        desrializeWeenieData(reader);
+        deserializeWeenieData(reader);
     }
 
     /// <see cref="ACE.Server.WorldObjects.WorldObject.SerializeModelData"/>

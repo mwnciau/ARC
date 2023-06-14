@@ -1,4 +1,6 @@
 using ACE.Common;
+using ACE.Database;
+using ACE.Server.Managers;
 using System;
 using System.Globalization;
 using System.IO;
@@ -15,7 +17,13 @@ public class TestCase
         Thread.CurrentThread.CurrentCulture = new CultureInfo("en-US");
         System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
-        File.Copy(Path.Combine(Environment.CurrentDirectory, "..\\..\\..\\..\\..\\ACE.Server\\Config.js.example"), ".\\Config.js", true);
+        File.Copy(Path.Combine(Environment.CurrentDirectory, "..\\..\\..\\..\\..\\ACE.Server\\bin\\x64\\Debug\\net6.0\\Config.js"), ".\\Config.js", true);
         ConfigManager.Initialize();
+
+        DatabaseManager.Initialize();
+        DatabaseManager.Start();
+
+        GuidManager.Initialize();
+
     }
 }
