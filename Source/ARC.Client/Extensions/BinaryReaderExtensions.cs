@@ -1,8 +1,43 @@
+using ACE.Common.Extensions;
+using ACE.Entity;
+using ACE.Server.Network.Structure;
+
 namespace ARC.Client.Extensions;
 
 public static class BinaryReaderExtensions
 {
-    public static uint ReadPackedDword(this BinaryReader reader)
+    public static RestrictionDB ReadRestrictionDB(this BinaryReader reader)
+    {
+        var restrictionDB = new RestrictionDB();
+
+        restrictionDB.Version = reader.ReadUInt32();
+        restrictionDB.OpenStatus = Convert.ToBoolean(reader.ReadUInt32());
+        restrictionDB.MonarchID = new ObjectGuid(reader.ReadUInt32());
+        restrictionDB.Table = reader.ReadObjectGuidDictionary();
+
+        return restrictionDB;
+    }
+
+    public static Dictionary<ObjectGuid,uint> ReadObjectGuidDictionary(this BinaryReader reader)
+    {
+        var dictionary = new Dictionary<ObjectGuid, uint>();
+
+        int dictionaryLength = reader.ReadUInt16();
+
+        // Contains the number of buckets, a currently hard-coded and unused variable in ACE
+        reader.Skip(2);
+
+        for (int i = 0; i < dictionaryLength; i++) {
+            dictionary.Add(
+                new ObjectGuid(reader.ReadUInt32()),
+                reader.ReadUInt32()
+            );
+        }
+
+        return dictionary;
+    }
+
+        public static uint ReadPackedDword(this BinaryReader reader)
     {
         uint dword = BitConverter.ToUInt16(reader.ReadBytes(2));
 

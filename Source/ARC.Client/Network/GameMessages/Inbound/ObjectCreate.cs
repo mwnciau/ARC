@@ -10,6 +10,12 @@ using InboundMessage = ACE.Server.Network.ClientMessage;
 using ACE.Server.Network.Structure;
 using System.Numerics;
 using ACE.Server.Network.Sequence;
+using ACE.Server.WorldObjects;
+using Google.Protobuf.WellKnownTypes;
+using WorldObject = ARC.Client.Entity.WorldObject.WorldObject;
+using ACE.Server.Entity;
+using ARC.Client.Entity.WorldObject;
+using SubPalette = ACE.Entity.SubPalette;
 
 namespace ARC.Client.Network.GameMessages.Inbound;
 
@@ -17,15 +23,15 @@ public class ObjectCreate : InboundGameMessage
 {
     public static new GameMessageOpcode Opcode = GameMessageOpcode.ObjectCreate;
 
-    public ObjectGuid Guid{ get; private set; }
-
+    public WorldObject Object { get; private set; }
 
     /// <see cref="ACE.Server.Network.GameMessages.Messages.GameMessageCreateObject"/>
     public override void Handle(InboundMessage message, Session session)
     {
         var reader = new BinaryReader(message.Data);
 
-        Guid = reader.ReadGuid();
+        Object = new WorldObject();
+        Object.Guid = reader.ReadGuid();
 
         // In the writer, there is a check (bool gameDataOnly) to see if these fields should be
         // written. gameDataOnly is false only for the GameEventType.ApproachVendor
@@ -38,6 +44,7 @@ public class ObjectCreate : InboundGameMessage
     /// <see cref="ACE.Server.WorldObjects.WorldObject.SerializeModelData"/>
     public void deserializeModelData(BinaryReader reader)
     {
+        Object.Model = new WorldObjectModel();
         // Always set to 0x11
         reader.Skip(1);
 
@@ -45,25 +52,37 @@ public class ObjectCreate : InboundGameMessage
         int textureChanges = reader.ReadByte();
         int animPartChanges = reader.ReadByte();
 
-        uint paletteId;
         if (subPaletteCount > 0) {
-            paletteId = reader.ReadPackedDwordOfKnownType(0x4000000);
+            Object.Model.PaletteId = reader.ReadPackedDwordOfKnownType(0x4000000);
+            Object.Model.SubPalettes = new();
         }
         for (int i = 0; i < subPaletteCount; i++) {
-            uint subPaletteId = reader.ReadPackedDwordOfKnownType(0x4000000);
-            ushort subPaletteOffset = reader.ReadByte();
-            ushort subPaletteLength = reader.ReadByte();
+            Object.Model.SubPalettes.Add(new SubPalette {
+                SubID = reader.ReadPackedDwordOfKnownType(0x4000000),
+                Offset = reader.ReadByte(),
+                NumColors = reader.ReadByte()
+            });
         }
 
+        if (textureChanges > 0) {
+            Object.Model.TextureMapChanges = new();
+        }
         for (int i = 0; i < textureChanges; i++) {
-            byte texturePartIndex = reader.ReadByte();
-            uint oldTexture = reader.ReadPackedDwordOfKnownType(0x5000000);
-            uint newTexture = reader.ReadPackedDwordOfKnownType(0x5000000);
+            Object.Model.TextureMapChanges.Add(new ACE.Entity.TextureMapChange {
+                PartIndex = reader.ReadByte(),
+                OldTexture = reader.ReadPackedDwordOfKnownType(0x5000000),
+                NewTexture = reader.ReadPackedDwordOfKnownType(0x5000000),
+            });
         }
 
+        if (animPartChanges > 0) {
+            Object.Model.AnimationPartChanges = new();
+        }
         for (int i = 0; i < animPartChanges; i++) {
-            byte modelIndex = reader.ReadByte();
-            uint animationId = reader.ReadPackedDwordOfKnownType(0x1000000);
+            Object.Model.AnimationPartChanges.Add(new ACE.Entity.AnimationPartChange {
+                PartIndex = reader.ReadByte(),
+                PartID = reader.ReadPackedDwordOfKnownType(0x1000000),
+            });
         }
 
         reader.Align();
@@ -170,11 +189,162 @@ public class ObjectCreate : InboundGameMessage
     public void deserializeWeenieData(BinaryReader reader)
     {
         var weenieFlags = (WeenieHeaderFlag)reader.ReadUInt32();
-        string name = reader.ReadString16L();
-        uint classId = reader.ReadPackedDword();
-        uint iconId = reader.ReadPackedDwordOfKnownType(0x6000000);
-        var itemType = (ItemType)reader.ReadUInt32();
+        WeenieHeaderFlag2 weenieFlags2 = WeenieHeaderFlag2.None;
+        Object.Name = reader.ReadString16L();
+        Object.ClassId = reader.ReadPackedDword();
+        Object.IconId = reader.ReadPackedDwordOfKnownType(0x6000000);
+        Object.ItemType = (ItemType)reader.ReadUInt32();
         var objectDescriptionFlags = (ObjectDescriptionFlag)reader.ReadUInt32();
+        reader.Align();
+
+        if ((objectDescriptionFlags & ObjectDescriptionFlag.IncludesSecondHeader) != 0) {
+            weenieFlags2 = (WeenieHeaderFlag2)reader.ReadUInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.PluralName) != 0) {
+            Object.PluralName = reader.ReadString16L();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.ItemsCapacity) != 0) {
+            Object.ItemCapacity = reader.ReadByte();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.ContainersCapacity) != 0) {
+            Object.ContainerCapacity = reader.ReadByte();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.AmmoType) != 0) {
+            Object.AmmoType = (AmmoType)reader.ReadUInt16();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.Value) != 0) {
+            Object.Value = reader.ReadInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.Usable) != 0) {
+            Object.Usable = (Usable)reader.ReadUInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.UseRadius) != 0) {
+            Object.UseRadius = reader.ReadSingle();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.TargetType) != 0) {
+            Object.TargetType = (ItemType)reader.ReadUInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.UiEffects) != 0) {
+            Object.UiEffects = (UiEffects)reader.ReadUInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.CombatUse) != 0) {
+            Object.CombatUse = (CombatUse)reader.ReadSByte();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.Structure) != 0) {
+            Object.Structure = reader.ReadUInt16();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.MaxStructure) != 0) {
+            Object.MaxStructure = reader.ReadUInt16();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.StackSize) != 0) {
+            Object.StackSize = reader.ReadUInt16();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.MaxStackSize) != 0) {
+            Object.MaxStackSize = reader.ReadUInt16();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.Container) != 0) {
+            Object.ContainerId = reader.ReadUInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.Wielder) != 0) {
+            Object.WielderId = reader.ReadUInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.ValidLocations) != 0) {
+            Object.ValidLocations = (EquipMask)reader.ReadUInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.CurrentlyWieldedLocation) != 0) {
+            Object.CurrentWieldedLocation = (EquipMask)reader.ReadUInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.Priority) != 0) {
+            Object.ClothingPriority = (CoverageMask)reader.ReadUInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.RadarBlipColor) != 0) {
+            Object.adarColor = (RadarColor)reader.ReadByte();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.RadarBehavior) != 0) {
+            Object.adarBehavior = (RadarBehavior)reader.ReadByte();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.PScript) != 0) {
+            Object.PScript = reader.ReadUInt16();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.Workmanship) != 0) {
+            Object.Workmanship = reader.ReadSingle();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.Burden) != 0) {
+            Object.Burden = reader.ReadUInt16();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.Spell) != 0) {
+            Object.SpellDID = reader.ReadUInt16();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.HouseOwner) != 0) {
+            Object.HouseOwner = reader.ReadUInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.HouseRestrictions) != 0) {
+            Object.HouseRestrictions = reader.ReadRestrictionDB();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.HookItemTypes) != 0) {
+            Object.HookItemType = (int)reader.ReadUInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.Monarch) != 0) {
+            Object.MonarchId = reader.ReadUInt32();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.HookType) != 0) {
+            Object.HookType = reader.ReadUInt16();
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.IconOverlay) != 0) {
+            Object.IconOverlayId = reader.ReadPackedDwordOfKnownType(0x6000000);
+        }
+
+        if ((weenieFlags2 & WeenieHeaderFlag2.IconUnderlay) != 0) {
+            Object.IconUnderlayId = reader.ReadPackedDwordOfKnownType(0x6000000);
+        }
+
+        if ((weenieFlags & WeenieHeaderFlag.MaterialType) != 0) {
+            Object.MaterialType = (MaterialType)reader.ReadUInt32();
+        }
+
+        if ((weenieFlags2 & WeenieHeaderFlag2.Cooldown) != 0) {
+            Object.CooldownId = reader.ReadInt32();
+        }
+
+        if ((weenieFlags2 & WeenieHeaderFlag2.CooldownDuration) != 0) {
+            Object.CooldownDuration = reader.ReadDouble();
+        }
+
+        if ((weenieFlags2 & WeenieHeaderFlag2.PetOwner) != 0) {
+            Object.PetOwner = reader.ReadUInt32();
+        }
+
         reader.Align();
     }
 
@@ -183,7 +353,7 @@ public class ObjectCreate : InboundGameMessage
         return $@"
 
         <<< GameMessage: CreateObject [0x{(int)Opcode:X4}:{Opcode}]
-            Guid:      {Guid}
+            Guid:      {Object.Guid}
 
         ";
     }
