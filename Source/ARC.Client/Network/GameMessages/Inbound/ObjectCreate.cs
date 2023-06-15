@@ -1,21 +1,18 @@
+using ARC.Client.Extensions;
 using ACE.Common.Extensions;
-using ACE.DatLoader.Entity;
-using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Server.Network;
 using ACE.Server.Network.GameMessages;
-using ARC.Client.Extensions;
-using Position = ARC.Client.Entity.Position;
-using InboundMessage = ACE.Server.Network.ClientMessage;
 using ACE.Server.Network.Structure;
-using System.Numerics;
-using ACE.Server.Network.Sequence;
-using ACE.Server.WorldObjects;
-using Google.Protobuf.WellKnownTypes;
-using WorldObject = ARC.Client.Entity.WorldObject.WorldObject;
-using ACE.Server.Entity;
+using AnimationPartChange = ACE.Entity.AnimationPartChange;
 using ARC.Client.Entity.WorldObject;
+using InboundMessage = ACE.Server.Network.ClientMessage;
+using Position = ARC.Client.Entity.Position;
+using System.Numerics;
 using SubPalette = ACE.Entity.SubPalette;
+using TextureMapChange = ACE.Entity.TextureMapChange;
+using WorldObject = ARC.Client.Entity.WorldObject.WorldObject;
+using ACE.Server.Physics.Common;
 
 namespace ARC.Client.Network.GameMessages.Inbound;
 
@@ -48,41 +45,37 @@ public class ObjectCreate : InboundGameMessage
         // Always set to 0x11
         reader.Skip(1);
 
-        int subPaletteCount = reader.ReadByte();
-        int textureChanges = reader.ReadByte();
-        int animPartChanges = reader.ReadByte();
+        Object.Model.SubPaletteCount = reader.ReadByte();
+        Object.Model.TextureMapChangeCount = reader.ReadByte();
+        Object.Model.AnimationPartChangeCount = reader.ReadByte();
 
-        if (subPaletteCount > 0) {
+        if (Object.Model.SubPaletteCount > 0) {
             Object.Model.PaletteId = reader.ReadPackedDwordOfKnownType(0x4000000);
-            Object.Model.SubPalettes = new();
         }
-        for (int i = 0; i < subPaletteCount; i++) {
-            Object.Model.SubPalettes.Add(new SubPalette {
+        Object.Model.SubPalettes = new SubPalette[Object.Model.SubPaletteCount];
+        for (int i = 0; i < Object.Model.SubPaletteCount; i++) {
+            Object.Model.SubPalettes[i] = new SubPalette {
                 SubID = reader.ReadPackedDwordOfKnownType(0x4000000),
                 Offset = reader.ReadByte(),
                 NumColors = reader.ReadByte()
-            });
+            };
         }
 
-        if (textureChanges > 0) {
-            Object.Model.TextureMapChanges = new();
-        }
-        for (int i = 0; i < textureChanges; i++) {
-            Object.Model.TextureMapChanges.Add(new ACE.Entity.TextureMapChange {
+        Object.Model.TextureMapChanges = new TextureMapChange[Object.Model.TextureMapChangeCount];
+        for (int i = 0; i < Object.Model.TextureMapChangeCount; i++) {
+            Object.Model.TextureMapChanges[i] = new TextureMapChange {
                 PartIndex = reader.ReadByte(),
                 OldTexture = reader.ReadPackedDwordOfKnownType(0x5000000),
                 NewTexture = reader.ReadPackedDwordOfKnownType(0x5000000),
-            });
+            };
         }
 
-        if (animPartChanges > 0) {
-            Object.Model.AnimationPartChanges = new();
-        }
-        for (int i = 0; i < animPartChanges; i++) {
-            Object.Model.AnimationPartChanges.Add(new ACE.Entity.AnimationPartChange {
+        Object.Model.AnimationPartChanges = new AnimationPartChange[Object.Model.AnimationPartChangeCount];
+        for (int i = 0; i < Object.Model.AnimationPartChangeCount; i++) {
+            Object.Model.AnimationPartChanges[i] = new AnimationPartChange {
                 PartIndex = reader.ReadByte(),
                 PartID = reader.ReadPackedDwordOfKnownType(0x1000000),
-            });
+            };
         }
 
         reader.Align();
@@ -91,97 +84,101 @@ public class ObjectCreate : InboundGameMessage
     /// <see cref="ACE.Server.WorldObjects.WorldObject.SerializePhysicsData"/>
     public void deserializePhysicsData(BinaryReader reader)
     {
+        Object.Physics = new();
         var physicsDescriptionFlag = (PhysicsDescriptionFlag)reader.ReadUInt32();
-        var physicsState = (PhysicsState)reader.ReadUInt32();
+        Object.Physics.PhysicsState = (PhysicsState)reader.ReadUInt32();
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Movement) != 0) {
-            int movementDataLength = (int)reader.ReadUInt32();
-            if (movementDataLength > 0) {
-                byte[] movementData = reader.ReadBytes(movementDataLength);
-                bool isAutonomous = Convert.ToBoolean(reader.ReadUInt32());
+            Object.Physics.MovementDataLength = (int)reader.ReadUInt32();
+            if (Object.Physics.MovementDataLength > 0) {
+                Object.Physics.MovementData = reader.ReadBytes((int)Object.Physics.MovementDataLength);
+                Object.Physics.IsAutonomous = Convert.ToBoolean(reader.ReadUInt32());
             }
         } else if ((physicsDescriptionFlag & PhysicsDescriptionFlag.AnimationFrame) != 0) {
-            var placement = (Placement)reader.ReadUInt32();
+            Object.Physics.Placement = (Placement)reader.ReadUInt32();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Position) != 0) {
-            var position = Position.Deserialize(reader);
+            Object.Physics.Position = Position.Deserialize(reader);
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.MTable) != 0) {
-            uint motionTableId = reader.ReadUInt32();
+            Object.Physics.MotionTableId = reader.ReadUInt32();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.STable) != 0) {
-            uint soundTableId = reader.ReadUInt32();
+            Object.Physics.SoundTableId = reader.ReadUInt32();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.PeTable) != 0) {
-            uint physicsTableId = reader.ReadUInt32();
+            Object.Physics.PhysicsTableId = reader.ReadUInt32();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.CSetup) != 0) {
-            uint setupTableId = reader.ReadUInt32();
+            Object.Physics.SetupTableId = reader.ReadUInt32();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Parent) != 0) {
-            uint wielderId = reader.ReadUInt32();
-            var parentLocation = (ParentLocation)reader.ReadUInt32();
+            Object.Physics.WielderId = reader.ReadUInt32();
+            Object.Physics.ParentLocation = (ParentLocation)reader.ReadUInt32();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Children) != 0) {
-            int childrenCount = reader.ReadInt32();
-            for (int i = 0; i < childrenCount; i++) {
-                uint childGuid = reader.ReadUInt32();
-                int locationId = reader.ReadInt32();
+            Object.Physics.ChildrenCount = reader.ReadInt32();
+            Object.Physics.Children = new WorldObjectChildren[(int)Object.Physics.ChildrenCount];
+            for (int i = 0; i < Object.Physics.ChildrenCount; i++) {
+                Object.Physics.Children[i] = new WorldObjectChildren() {
+                    Guid = reader.ReadUInt32(),
+                    LocationId = reader.ReadInt32(),
+                };
             }
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.ObjScale) != 0) {
-            float objScale = reader.ReadSingle();
+            Object.Physics.Scale = reader.ReadSingle();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Friction) != 0) {
-            float friction = reader.ReadSingle();
+            Object.Physics.Friction = reader.ReadSingle();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Elasticity) != 0) {
-            float elasticity = reader.ReadSingle();
+            Object.Physics.Elasticity = reader.ReadSingle();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Translucency) != 0) {
-            float translucency = reader.ReadSingle();
+            Object.Physics.Translucency = reader.ReadSingle();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Acceleration) != 0) {
-            Vector3 velocity = reader.ReadVector3();
+            Object.Physics.Velocity = reader.ReadVector3();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Velocity) != 0) {
-            Vector3 acceleration = reader.ReadVector3();
+            Object.Physics.Acceleration = reader.ReadVector3();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Omega) != 0) {
-            Vector3 omega = reader.ReadVector3();
+            Object.Physics.Omega = reader.ReadVector3();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.DefaultScript) != 0) {
-            uint defaultScriptId = reader.ReadUInt32();
+            Object.Physics.DefaultScriptId = reader.ReadUInt32();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.DefaultScriptIntensity) != 0) {
-            float defaultScriptIntensity = reader.ReadSingle();
+            Object.Physics.DefaultScriptIntensity = reader.ReadSingle();
         }
         
-        ushort objectPosition = BitConverter.ToUInt16(reader.ReadBytes(2));
-        ushort objectMovement = BitConverter.ToUInt16(reader.ReadBytes(2));
-        ushort objectState = BitConverter.ToUInt16(reader.ReadBytes(2));
-        ushort objectVector = BitConverter.ToUInt16(reader.ReadBytes(2));
-        ushort objectTeleport = BitConverter.ToUInt16(reader.ReadBytes(2));
-        ushort objectServerControl = BitConverter.ToUInt16(reader.ReadBytes(2));
-        ushort objectForcePosition = BitConverter.ToUInt16(reader.ReadBytes(2));
-        ushort objectVisualDesc = BitConverter.ToUInt16(reader.ReadBytes(2));
-        ushort objectInstance = BitConverter.ToUInt16(reader.ReadBytes(2));
+        Object.Physics.ObjectPosition = BitConverter.ToUInt16(reader.ReadBytes(2));
+        Object.Physics.ObjectMovement = BitConverter.ToUInt16(reader.ReadBytes(2));
+        Object.Physics.ObjectState = BitConverter.ToUInt16(reader.ReadBytes(2));
+        Object.Physics.ObjectVector = BitConverter.ToUInt16(reader.ReadBytes(2));
+        Object.Physics.ObjectTeleport = BitConverter.ToUInt16(reader.ReadBytes(2));
+        Object.Physics.ObjectServerControl = BitConverter.ToUInt16(reader.ReadBytes(2));
+        Object.Physics.ObjectForcePosition = BitConverter.ToUInt16(reader.ReadBytes(2));
+        Object.Physics.ObjectVisualDesc = BitConverter.ToUInt16(reader.ReadBytes(2));
+        Object.Physics.ObjectInstance = BitConverter.ToUInt16(reader.ReadBytes(2));
 
         reader.Align();
     }

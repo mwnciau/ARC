@@ -100,8 +100,17 @@ public class InboundGameMessages : TestCase
     public void PlayerCreate()
     { }
 
+    [TestMethod]
     public void ObjectCreate()
-    { }
+    {
+        InboundMessage inboundMessage = convertToInboundMessage(
+            new GameMessageCreateObject(ClassFactory.WorldObject())
+        );
+        ObjectCreate objectCreate = new();
+        objectCreate.Handle(inboundMessage, new Session());
+
+        Assert.AreEqual(null, objectCreate.Object);
+    }
 
     public void PlayEffect()
     { }
