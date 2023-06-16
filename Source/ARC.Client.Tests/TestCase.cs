@@ -1,6 +1,8 @@
 using ACE.Common;
 using ACE.Database;
+using ACE.DatLoader;
 using ACE.Server.Managers;
+using log4net;
 using System;
 using System.Globalization;
 using System.IO;
@@ -19,6 +21,8 @@ public class TestCase
 
         File.Copy(Path.Combine(Environment.CurrentDirectory, "..\\..\\..\\..\\..\\ACE.Server\\bin\\x64\\Debug\\net6.0\\Config.js"), ".\\Config.js", true);
         ConfigManager.Initialize();
+
+        DatManager.Initialize(ConfigManager.Config.Server.DatFilesDirectory, true);
 
         DatabaseManager.Initialize();
         DatabaseManager.Start();

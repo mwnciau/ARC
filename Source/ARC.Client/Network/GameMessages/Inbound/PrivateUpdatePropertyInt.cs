@@ -8,7 +8,7 @@ public class PrivateUpdatePropertyInt : InboundGameMessage
 {
     public static new GameMessageOpcode Opcode = GameMessageOpcode.PrivateUpdatePropertyInt;
 
-    public byte[] Sequence { get; private set; }
+    public byte Sequence { get; private set; }
     public PropertyInt Property { get; private set; }
     public int Value { get; private set; }
 
@@ -18,7 +18,7 @@ public class PrivateUpdatePropertyInt : InboundGameMessage
     {
         var reader = new BinaryReader(message.Data);
 
-        Sequence = reader.ReadBytes(1);
+        Sequence = reader.ReadByte();
         Property = (PropertyInt)reader.ReadUInt32();
         Value = reader.ReadInt32();
     }

@@ -1,13 +1,10 @@
 using ACE.Entity;
 
-namespace ARC.Client.Entity;
-public class Position
+namespace ARC.Client.Extensions;
+public class PositionExtension
 {
     public static Position Deserialize(BinaryReader reader)
     {
-        Position position = new Position();
-
-        // Todo: convert to LandblockId object
         uint landblockId = reader.ReadUInt32();
 
         float positionX = reader.ReadSingle();
@@ -19,6 +16,16 @@ public class Position
         float RotationY = reader.ReadSingle();
         float RotationZ = reader.ReadSingle();
 
-        return position;
+
+        return new Position(
+            landblockId,
+            positionX,
+            positionY,
+            positionZ,
+            RotationX,
+            RotationY,
+            RotationZ,
+            RotationW
+        );
     }
 }

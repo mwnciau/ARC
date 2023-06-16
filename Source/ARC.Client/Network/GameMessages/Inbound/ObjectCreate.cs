@@ -7,8 +7,6 @@ using ACE.Server.Network.Structure;
 using AnimationPartChange = ACE.Entity.AnimationPartChange;
 using ARC.Client.Entity.WorldObject;
 using InboundMessage = ACE.Server.Network.ClientMessage;
-using Position = ARC.Client.Entity.Position;
-using System.Numerics;
 using SubPalette = ACE.Entity.SubPalette;
 using TextureMapChange = ACE.Entity.TextureMapChange;
 using WorldObject = ARC.Client.Entity.WorldObject.WorldObject;
@@ -99,7 +97,7 @@ public class ObjectCreate : InboundGameMessage
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Position) != 0) {
-            Object.Physics.Position = Position.Deserialize(reader);
+            Object.Physics.Position = PositionExtension.Deserialize(reader);
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.MTable) != 0) {
@@ -347,11 +345,22 @@ public class ObjectCreate : InboundGameMessage
 
     public override string ToString()
     {
+        string location = "Unknown location";
+
+        if (Object.Physics.Position != null) {
+            location = $"At coordinates {Object.Physics.Position.ToString()}";
+        } else if (Object.WielderId != null) {
+            location = $"Wielded by {Object.WielderId}";
+        } else if (Object.ContainerId != null) {
+            location = $"In container {Object.ContainerId}";
+        }
+
         return $@"
 
         <<< GameMessage: CreateObject [0x{(int)Opcode:X4}:{Opcode}]
             Guid:      {Object.Guid}
-
+            Name:      {Object.Name}
+            Location:  {location}
         ";
     }
 }

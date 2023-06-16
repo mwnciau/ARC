@@ -1,6 +1,8 @@
 using ACE.Database.Models.Shard;
+using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Network.GameMessages.Messages;
+using ACE.Server.WorldObjects;
 using ARC.Client.Network.GameMessages.Inbound;
 using ARC.Client.Tests.Support;
 using Moq;
@@ -72,8 +74,23 @@ public class InboundGameMessages : TestCase
         Assert.AreEqual(maxConnections, serverNameMessage.MaxConnections);
     }
 
+    [TestMethod]
     public void GameEvent()
-    { }
+    {
+        string message = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
+        ChatMessageType messageType = ChatMessageType.WorldBroadcast;
+
+        InboundMessage inboundMessage = convertToInboundMessage(new GameMessageSystemChat(
+            message,
+            messageType
+        ));
+
+        ServerMessage serverMessage = new();
+        serverMessage.Handle(inboundMessage, new Session());
+
+        Assert.AreEqual(message, serverMessage.Message);
+        Assert.AreEqual(messageType, serverMessage.ChatMessageType);
+    }
 
     public void ServerMessage()
     { }
@@ -103,13 +120,19 @@ public class InboundGameMessages : TestCase
     [TestMethod]
     public void ObjectCreate()
     {
+        WorldObject serverObject = ClassFactory.WorldObject();
         InboundMessage inboundMessage = convertToInboundMessage(
-            new GameMessageCreateObject(ClassFactory.WorldObject())
+            new GameMessageCreateObject(serverObject)
         );
         ObjectCreate objectCreate = new();
         objectCreate.Handle(inboundMessage, new Session());
 
-        Assert.AreEqual(null, objectCreate.Object);
+        Assert.AreEqual(serverObject.Name, objectCreate.Object.Name);
+        Assert.AreEqual(serverObject.Value, objectCreate.Object.Value);
+        Assert.AreEqual(serverObject.PhysicsTableId, objectCreate.Object.Physics.PhysicsTableId);
+        Assert.AreEqual(serverObject.EncumbranceVal, objectCreate.Object.Burden);
+        Assert.AreEqual(serverObject.IconUnderlayId, objectCreate.Object.IconUnderlayId);
+
     }
 
     public void PlayEffect()
