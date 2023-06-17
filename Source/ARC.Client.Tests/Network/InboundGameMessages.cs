@@ -74,8 +74,12 @@ public class InboundGameMessages : TestCase
         Assert.AreEqual(maxConnections, serverNameMessage.MaxConnections);
     }
 
-    [TestMethod]
     public void GameEvent()
+    {
+    }
+
+    [TestMethod]
+    public void ServerMessage()
     {
         string message = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.";
         ChatMessageType messageType = ChatMessageType.WorldBroadcast;
@@ -91,9 +95,6 @@ public class InboundGameMessages : TestCase
         Assert.AreEqual(message, serverMessage.Message);
         Assert.AreEqual(messageType, serverMessage.ChatMessageType);
     }
-
-    public void ServerMessage()
-    { }
 
     [TestMethod]
     public void PrivateUpdatePropertyInt()
@@ -114,8 +115,18 @@ public class InboundGameMessages : TestCase
         Assert.AreEqual(value, updatePropertyIntMessage.Value);
     }
 
+    [TestMethod]
     public void PlayerCreate()
-    { }
+    {
+        var playerGuid = new ACE.Entity.ObjectGuid(123456);
+        InboundMessage inboundMessage = convertToInboundMessage(
+            new GameMessagePlayerCreate(playerGuid)
+        );
+        PlayerCreate playerCreate = new();
+        playerCreate.Handle(inboundMessage, new Session());
+
+        Assert.AreEqual(playerCreate.Guid, playerGuid);
+    }
 
     [TestMethod]
     public void ObjectCreate()
@@ -132,9 +143,9 @@ public class InboundGameMessages : TestCase
         Assert.AreEqual(serverObject.PhysicsTableId, objectCreate.Object.Physics.PhysicsTableId);
         Assert.AreEqual(serverObject.EncumbranceVal, objectCreate.Object.Burden);
         Assert.AreEqual(serverObject.IconUnderlayId, objectCreate.Object.IconUnderlayId);
-
     }
 
     public void PlayEffect()
-    { }
+    {
+    }
 }
