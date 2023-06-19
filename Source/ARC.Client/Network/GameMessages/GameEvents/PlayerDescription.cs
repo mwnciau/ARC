@@ -1,8 +1,12 @@
+using ACE.Common.Extensions;
+using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Network.GameEvent;
-using ACE.Common.Extensions;
 using ARC.Client.Network.GameMessages.Inbound;
+using ARC.Client.Extensions;
+using ACE.Server.WorldObjects.Entity;
+using ACE.Server.Network.Structure;
 
 namespace ARC.Client.Network.GameMessages.GameEvents;
 public class PlayerDescription : InboundGameEvent
@@ -45,9 +49,12 @@ public class PlayerDescription : InboundGameEvent
         PropertyFlags = (DescriptionPropertyFlag)Reader.ReadUInt32();
 
         var weenieType = (WeenieType)Reader.ReadUInt32();
+
+        ReadDataDictionaries();
+        ReadPlayerData();
     }
 
-    private void HandleDataDictionaries()
+    private void ReadDataDictionaries()
     {
         if ((PropertyFlags & DescriptionPropertyFlag.PropertyInt32) != 0) {
             ushort propertiesIntCount = Reader.ReadUInt16();
@@ -139,5 +146,158 @@ public class PlayerDescription : InboundGameEvent
                 );
             }
         }
+    }
+
+    private void ReadPlayerData()
+    {
+        if ((PropertyFlags & DescriptionPropertyFlag.Position) != 0) {
+            // Should be Positionype.LastOutsideDeath
+            var positionType = (PositionType)Reader.ReadUInt32();
+            Position lastOutsideDeath = Reader.ReadPosition();
+        }
+
+        var vectorFlags = (DescriptionVectorFlag)Reader.ReadUInt32();
+
+        uint currentHealth = Reader.ReadUInt32();
+
+        if ((vectorFlags & DescriptionVectorFlag.Attribute) != 0) {
+            ReadPlayerAttributes();
+        }
+        if ((vectorFlags & DescriptionVectorFlag.Skill) != 0) {
+            ReadPlayerSkills();
+        }
+        if ((vectorFlags & DescriptionVectorFlag.Spell) != 0) {
+            ReadPlayerKnownSpells();
+        }
+        if ((vectorFlags & DescriptionVectorFlag.Enchantment) != 0) {
+            ReadPlayerEnchantments();
+        }
+    }
+
+    private void ReadPlayerAttributes()
+    {
+        var attributeFlags = (AttributeCache)Reader.ReadUInt32();
+
+        if ((attributeFlags & AttributeCache.Strength) != 0) {
+            uint strengthRanks = Reader.ReadUInt32();
+            uint strengthBase = Reader.ReadUInt32();
+            uint strengthExperience = Reader.ReadUInt32();
+        }
+
+        if ((attributeFlags & AttributeCache.Endurance) != 0) {
+            uint enduranceRanks = Reader.ReadUInt32();
+            uint enduranceBase = Reader.ReadUInt32();
+            uint enduranceExperience = Reader.ReadUInt32();
+        }
+
+        if ((attributeFlags & AttributeCache.Quickness) != 0) {
+            uint quicknessRanks = Reader.ReadUInt32();
+            uint quicknessBase = Reader.ReadUInt32();
+            uint quicknessExperience = Reader.ReadUInt32();
+        }
+
+        if ((attributeFlags & AttributeCache.Coordination) != 0) {
+            uint coordinationRanks = Reader.ReadUInt32();
+            uint coordinationBase = Reader.ReadUInt32();
+            uint coordinationExperience = Reader.ReadUInt32();
+        }
+
+        if ((attributeFlags & AttributeCache.Focus) != 0) {
+            uint focusRanks = Reader.ReadUInt32();
+            uint focusBase = Reader.ReadUInt32();
+            uint focusExperience = Reader.ReadUInt32();
+        }
+
+        if ((attributeFlags & AttributeCache.Self) != 0) {
+            uint selfRanks = Reader.ReadUInt32();
+            uint selfBase = Reader.ReadUInt32();
+            uint selfExperience = Reader.ReadUInt32();
+        }
+
+        if ((attributeFlags & AttributeCache.Health) != 0) {
+            uint healthRanks = Reader.ReadUInt32();
+            uint healthBase = Reader.ReadUInt32();
+            uint healthExperience = Reader.ReadUInt32();
+        }
+
+        if ((attributeFlags & AttributeCache.Stamina) != 0) {
+            uint staminaRanks = Reader.ReadUInt32();
+            uint staminaBase = Reader.ReadUInt32();
+            uint staminaExperience = Reader.ReadUInt32();
+        }
+
+        if ((attributeFlags & AttributeCache.Mana) != 0) {
+            uint manaRanks = Reader.ReadUInt32();
+            uint manaBase = Reader.ReadUInt32();
+            uint manaExperience = Reader.ReadUInt32();
+        }
+    }
+
+    private void ReadPlayerSkills()
+    {
+        ushort skillCount = Reader.ReadUInt16();
+        ushort skillBuckets = Reader.ReadUInt16();
+
+        for (int i = 0; i < skillCount; i++) {
+            var skillId = (Skill)Reader.ReadUInt32();
+            ushort skillRanks = Reader.ReadUInt16();
+
+            // Always set to 1u
+            Reader.ReadUInt16();
+
+            var advancementClass = (SkillAdvancementClass)Reader.ReadUInt32();
+            uint skillExperience = Reader.ReadUInt32();
+            uint skillBase = Reader.ReadUInt32();
+
+            // "task difficulty, aka resistance_of_last_check". Always set to 0u.
+            Reader.ReadUInt32();
+
+            // "last_time_used". Always set to 0d.
+            Reader.ReadDouble();
+        }
+    }
+
+    private void ReadPlayerKnownSpells()
+    {
+        ushort spellCount = Reader.ReadUInt16();
+        ushort spellBuckets = Reader.ReadUInt16();
+
+        for (int i = 0; i < spellCount; i++) {
+            int spellId = Reader.ReadInt32();
+            // Use new spell configuration. Always set to 2.
+            Reader.ReadSingle();
+        }
+    }
+
+    /// <see cref="ACE.Server.Network.Structure.EnchantmentRegistryExtensions"/>
+    private void ReadPlayerEnchantments()
+    {
+        var enchantmentMask = (EnchantmentMask)Reader.ReadUInt32();
+
+        if (enchantmentMask.HasFlag(EnchantmentMask.Multiplicative)) {
+            var multiplicativeEnchantments = ReadEnchantments();
+        }
+        if (enchantmentMask.HasFlag(EnchantmentMask.Additive)) {
+            var additiveEnchantments = ReadEnchantments();
+        }
+        if (enchantmentMask.HasFlag(EnchantmentMask.Cooldown)) {
+            var cooldownEnchantments = ReadEnchantments();
+        }
+        if (enchantmentMask.HasFlag(EnchantmentMask.Vitae)) {
+            var vitaeEnchantments = ReadEnchantments();
+        }
+    }
+
+    /// <see cref="ACE.Server.Network.Structure.EnchantmentExtensions"/>
+    private List<Enchantment> ReadEnchantments()
+    {
+        int enchantmentCount = Reader.ReadInt32();
+        var enchantments = new List<Enchantment>();
+
+        for (int i = 0; i <  enchantmentCount; i++) {
+            // Reader.ReadEnchantment();
+        }
+
+        return enchantments;
     }
 }

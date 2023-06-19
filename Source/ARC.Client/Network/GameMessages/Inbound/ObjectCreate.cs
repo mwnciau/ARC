@@ -97,7 +97,7 @@ public class ObjectCreate : InboundGameMessage
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Position) != 0) {
-            Object.Physics.Position = PositionExtension.Deserialize(reader);
+            Object.Physics.Position = reader.ReadPosition();
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.MTable) != 0) {
