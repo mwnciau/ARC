@@ -4,6 +4,7 @@ using ACE.Entity.Enum.Properties;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
+using ARC.Client.Network.GameMessages.GameEvents;
 using ARC.Client.Network.GameMessages.Inbound;
 using ARC.Client.Tests.Support;
 using Moq;
@@ -18,8 +19,26 @@ namespace ARC.Client.Tests.Network;
 [TestClass]
 public class InboundGameEvents : TestCase
 {
+    private InboundMessage convertToInboundMessage(OutboundGameMessage outboundPacket)
+    {
+        InboundMessage inboundMessage = new(outboundPacket.Data.GetBuffer());
+
+        return inboundMessage;
+    }
+
+    [TestMethod]
     public void PlayerDescription()
     {
+        var player = new Player(new ACE.Entity.Models.Weenie(), new ACE.Entity.ObjectGuid(), 0);
+        Mock<ServerSession> serverSessionMock = ClassFactory.MockServerSession();
+        serverSessionMock.SetupGet(x => x.Player).Returns(player);
+
+        var outboundPacket = new GameEventPlayerDescription(serverSessionMock.Object);
+        var gameEvent = new GameEvent();
+        gameEvent.Handle(convertToInboundMessage(outboundPacket), new Session());
+
+        var playerDescriptionMessage = new PlayerDescription();
+        playerDescriptionMessage.Handle(gameEvent, new Session());
     }
 
     public void CharacterTitle()
