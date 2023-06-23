@@ -5,8 +5,7 @@ using ACE.Entity.Enum.Properties;
 using ACE.Server.Network.GameEvent;
 using ARC.Client.Network.GameMessages.Inbound;
 using ARC.Client.Extensions;
-using ACE.Server.WorldObjects.Entity;
-using ACE.Server.Network.Structure;
+using ARC.Client.Entity.WorldObject;
 
 namespace ARC.Client.Network.GameMessages.GameEvents;
 public class PlayerDescription : InboundGameEvent
@@ -172,6 +171,8 @@ public class PlayerDescription : InboundGameEvent
         if ((vectorFlags & DescriptionVectorFlag.Enchantment) != 0) {
             ReadPlayerEnchantments();
         }
+
+        ReadCharacterOptions();
     }
 
     private void ReadPlayerAttributes()
@@ -295,9 +296,70 @@ public class PlayerDescription : InboundGameEvent
         var enchantments = new List<Enchantment>();
 
         for (int i = 0; i <  enchantmentCount; i++) {
-            // Reader.ReadEnchantment();
+            enchantments.Add(Reader.ReadEnchantment());
         }
 
         return enchantments;
+    }
+
+    private void ReadCharacterOptions()
+    {
+        var optionFlags = (CharacterOptionDataFlag)Reader.ReadUInt32();
+        int characterOptions1 = Reader.ReadInt32();
+
+        if (optionFlags.HasFlag(CharacterOptionDataFlag.Shortcut)) {
+            int shortcutCount = Reader.ReadInt32();
+            for (int i = 0; i < shortcutCount; i++) {
+                uint index = Reader.ReadUInt32();
+                uint objectId = Reader.ReadUInt32();
+                ushort spellId = Reader.ReadUInt16();
+                ushort spellLayer = Reader.ReadUInt16();
+            }
+        }
+
+        if (optionFlags.HasFlag(CharacterOptionDataFlag.SpellLists8)) {
+            var spellBars = new List<uint>[8];
+            for (int spellBarIndex = 0; spellBarIndex < 8; spellBarIndex++) {
+                spellBars[spellBarIndex] = new();
+                int spellCount = Reader.ReadInt32();
+                for (int i = 0; i < spellCount; i++) {
+                    spellBars[spellBarIndex].Add(Reader.ReadUInt32());
+                }
+            }
+        }
+
+        if (optionFlags.HasFlag(CharacterOptionDataFlag.DesiredComps)) {
+            ushort desiredCompsCount = Reader.ReadUInt16();
+            ushort desiredCompsBuckets = Reader.ReadUInt16();
+
+            for (int i = 0; i < desiredCompsCount; i++) {
+                int spellCompId = Reader.ReadInt32();
+                int rebuyAmount = Reader.ReadInt32();
+            }
+        }
+
+        uint spellbookFilters = Reader.ReadUInt32();
+
+        if (optionFlags.HasFlag(CharacterOptionDataFlag.CharacterOptions2)) {
+            int characterOptions2 = Reader.ReadInt32();
+        }
+
+        if (optionFlags.HasFlag(CharacterOptionDataFlag.GameplayOptions)) {
+            // 120 bytes is what the current ACClient/ACE uses
+            byte[] gameplayOptions = Reader.ReadBytes(120);
+        }
+
+        uint inventoryCount = Reader.ReadUInt32();
+        for (int i = 0; i <= inventoryCount; i++) {
+            uint objectId = Reader.ReadUInt32();
+            var containerType = (ContainerType)Reader.ReadUInt32();
+        }
+
+        uint equippedCount = Reader.ReadUInt32();
+        for (int i = 0; i <= equippedCount; i++) {
+            uint objectId = Reader.ReadUInt32();
+            var wieldLocation = (EquipMask)Reader.ReadUInt32();
+            var clothingPriority = (CoverageMask)Reader.ReadUInt32();
+        }
     }
 }

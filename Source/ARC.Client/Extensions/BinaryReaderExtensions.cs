@@ -1,6 +1,8 @@
 using ACE.Common.Extensions;
 using ACE.Entity;
+using ACE.Entity.Enum;
 using ACE.Server.Network.Structure;
+using Enchantment = ARC.Client.Entity.WorldObject.Enchantment;
 
 namespace ARC.Client.Extensions;
 
@@ -56,6 +58,31 @@ public static class BinaryReaderExtensions
         uint dword = reader.ReadPackedDword();
 
         return dword + type;
+    }
+
+    public static Enchantment ReadEnchantment(this BinaryReader reader)
+    {
+        var enchantment = new Enchantment();
+
+        enchantment.SpellId = reader.ReadUInt16();
+        enchantment.Layer = reader.ReadUInt16();
+        enchantment.SpellCategory = reader.ReadUInt16();
+        ushort hasSpellSetId = reader.ReadUInt16();
+        enchantment.PowerLevel = reader.ReadUInt32();
+        enchantment.StartTime = reader.ReadDouble();
+        enchantment.Duration = reader.ReadDouble();
+        enchantment.CasterGuid = reader.ReadUInt32();
+        enchantment.DegradeModifier = reader.ReadSingle();
+        enchantment.DegradeLimit = reader.ReadSingle();
+        enchantment.LastTimeDegraded = reader.ReadDouble();
+        enchantment.StatModType = (EnchantmentTypeFlags)reader.ReadUInt32();
+        enchantment.StatModKey = reader.ReadUInt32();
+        enchantment.StatModValue = reader.ReadSingle();
+        if (hasSpellSetId != 0) {
+            enchantment.SpellSetId = reader.ReadUInt32();
+        }
+
+        return enchantment;
     }
 
     public static Position ReadPosition(this BinaryReader reader)
