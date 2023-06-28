@@ -29,7 +29,7 @@ public class InboundGameEvents : TestCase
     [TestMethod]
     public void PlayerDescription()
     {
-        var player = new Player(new ACE.Entity.Models.Weenie(), new ACE.Entity.ObjectGuid(), 0);
+        var player = ClassFactory.Player();
         Mock<ServerSession> serverSessionMock = ClassFactory.MockServerSession();
         serverSessionMock.SetupGet(x => x.Player).Returns(player);
 

@@ -42,7 +42,7 @@ namespace ACE.Server.Network
 
         public List<Character> Characters { get; } = new List<Character>();
 
-        public Player Player { get; private set; }
+        public virtual Player Player { get; private set; }
 
 
         public DateTime logOffRequestTime;
