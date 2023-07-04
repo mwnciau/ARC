@@ -39,6 +39,8 @@ public class InboundGameEvents : TestCase
 
         var playerDescriptionMessage = new PlayerDescription();
         playerDescriptionMessage.Handle(gameEvent, new Session());
+
+        Assert.AreEqual(player.Name, playerDescriptionMessage.Name);
     }
 
     public void CharacterTitle()

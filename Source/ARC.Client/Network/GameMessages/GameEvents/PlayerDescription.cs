@@ -12,6 +12,8 @@ public class PlayerDescription : InboundGameEvent
 {
     public static GameEventType GameEventType = GameEventType.PlayerDescription;
 
+    public string Name { get; set; }
+
     /// <see cref="ACE.Server.Network.GameEvent.Events.GameEventPlayerDescription.DescriptionPropertyFlag"/>
     [Flags]
     private enum DescriptionPropertyFlag
@@ -68,7 +70,7 @@ public class PlayerDescription : InboundGameEvent
             }
         }
 
-        if ((PropertyFlags & DescriptionPropertyFlag.PropertyInt32) != 0) {
+        if ((PropertyFlags & DescriptionPropertyFlag.PropertyInt64) != 0) {
             ushort propertiesInt64Count = Reader.ReadUInt16();
             ushort propertiesInt64NumBuckets = Reader.ReadUInt16();
 
@@ -118,6 +120,10 @@ public class PlayerDescription : InboundGameEvent
                     Reader.ReadString16L()
                 );
             }
+
+            if (propertiesString.TryGetValue(PropertyString.Name, out string value)) {
+                Name = value;
+            }
         }
 
         if ((PropertyFlags & DescriptionPropertyFlag.PropertyDid) != 0) {
@@ -149,10 +155,13 @@ public class PlayerDescription : InboundGameEvent
 
     private void ReadPlayerData()
     {
-        if ((PropertyFlags & DescriptionPropertyFlag.Position) != 0) {
+        if (PropertyFlags.HasFlag(DescriptionPropertyFlag.Position)) {
+            ushort positionCount = Reader.ReadUInt16();
+            ushort positionBuckets = Reader.ReadUInt16();
+
             // Should be Positionype.LastOutsideDeath
             var positionType = (PositionType)Reader.ReadUInt32();
-            Position lastOutsideDeath = Reader.ReadPosition();
+            var lastOutsideDeath = new Position(Reader);
         }
 
         var vectorFlags = (DescriptionVectorFlag)Reader.ReadUInt32();
@@ -219,18 +228,21 @@ public class PlayerDescription : InboundGameEvent
             uint healthRanks = Reader.ReadUInt32();
             uint healthBase = Reader.ReadUInt32();
             uint healthExperience = Reader.ReadUInt32();
+            uint healthCurrent = Reader.ReadUInt32();
         }
 
         if ((attributeFlags & AttributeCache.Stamina) != 0) {
             uint staminaRanks = Reader.ReadUInt32();
             uint staminaBase = Reader.ReadUInt32();
             uint staminaExperience = Reader.ReadUInt32();
+            uint staminaCurrent = Reader.ReadUInt32();
         }
 
         if ((attributeFlags & AttributeCache.Mana) != 0) {
             uint manaRanks = Reader.ReadUInt32();
             uint manaBase = Reader.ReadUInt32();
             uint manaExperience = Reader.ReadUInt32();
+            uint manaCurrent = Reader.ReadUInt32();
         }
     }
 

@@ -97,7 +97,7 @@ public class ObjectCreate : InboundGameMessage
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.Position) != 0) {
-            Object.Physics.Position = reader.ReadPosition();
+            Object.Physics.Position = new ACE.Entity.Position(reader);
         }
 
         if ((physicsDescriptionFlag & PhysicsDescriptionFlag.MTable) != 0) {
